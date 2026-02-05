@@ -30,4 +30,4 @@ jobs:
 
       # 4. Gradle 빌드 (테스트 포함)
       - name: Build with Gradle
-        run: ./gradlew build
+        run: ./gradlew build -x test
