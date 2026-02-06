@@ -62,4 +62,4 @@ jobs:
           token: ${{ secrets.GITOPS_TOKEN }}
           repository: Final-project-gilmok/deploy-repo
           event-type: update-image
-          client-payload: '{"image_tag": "latest", "image_url": "${{ env.IMAGE_NAME }}"}'
+          client-payload: '{"image_tag": "latest", "image_url": "${{ env.IMAGE_NAME }}", "service_name": "api-server"}'
