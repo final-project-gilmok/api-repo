@@ -41,3 +41,6 @@ out/
 
 ### Node ###
 node_modules/
+### Node / Frontend ###
+node_modules/
+frontend/dist/
