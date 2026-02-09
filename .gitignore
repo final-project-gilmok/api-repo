@@ -36,6 +36,11 @@ out/
 ### VS Code ###
 .vscode/
 
+### Claude Code ###
+.claude/
+
+### Node ###
+node_modules/
 ### Node / Frontend ###
 node_modules/
 frontend/dist/
