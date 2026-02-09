@@ -22,17 +22,19 @@ export default function EventManagement() {
     const trimmedName = name.trim()
     const trimmedDescription = description.trim()
     if (!trimmedName) return
-    const newId = `EVT${String(events.length + 1).padStart(3, '0')}`
-    setEvents([
-      ...events,
-      {
-        id: newId,
-        name: trimmedName,
-        description: trimmedDescription,
-        status: 'draft',
-        createdAt: new Date().toISOString().slice(0, 10),
-      },
-    ])
+    setEvents((prev) => {
+      const newId = `EVT${String(prev.length + 1).padStart(3, '0')}`
+      return [
+        ...prev,
+        {
+          id: newId,
+          name: trimmedName,
+          description: trimmedDescription,
+          status: 'draft',
+          createdAt: new Date().toISOString().slice(0, 10),
+        },
+      ]
+    })
     setName('')
     setDescription('')
   }
@@ -73,7 +75,12 @@ export default function EventManagement() {
                         </td>
                         <td>{evt.createdAt}</td>
                         <td className="text-end">
-                          <Link to={`/admin/events/${evt.id}`} className="btn btn-sm btn-link text-secondary p-0" title="상세">
+                          <Link
+                            to={`/admin/events/${evt.id}`}
+                            className="btn btn-sm btn-link text-secondary p-0"
+                            title="상세"
+                            aria-label="이벤트 상세 보기"
+                          >
                             ⋮
                           </Link>
                         </td>
@@ -93,19 +100,21 @@ export default function EventManagement() {
               <p className="text-muted small mb-3">새로운 이벤트를 생성하고 데모 운영을 준비합니다.</p>
               <form onSubmit={handleCreate}>
                 <div className="mb-3">
-                  <label className="form-label">이벤트 이름 <span className="text-danger">*</span></label>
+                  <label htmlFor="event-name" className="form-label">이벤트 이름 <span className="text-danger">*</span></label>
                   <input
+                    id="event-name"
                     type="text"
                     className="form-control"
-                    placeholder="예: 2025년 신년 맞이 프로모션"
+                    placeholder="예: 2026년 신년 맞이 프로모션"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
                   />
                 </div>
                 <div className="mb-3">
-                  <label className="form-label">이벤트 설명 (선택)</label>
+                  <label htmlFor="event-description" className="form-label">이벤트 설명 (선택)</label>
                   <textarea
+                    id="event-description"
                     className="form-control"
                     rows={4}
                     placeholder="이벤트에 대한 자세한 설명을 입력하세요."
