@@ -1,15 +1,12 @@
 package kr.gilmok.api.queue.repository;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.DefaultTypedTuple;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
-import java.util.Set;
 
 @Repository
 @RequiredArgsConstructor
@@ -17,6 +14,7 @@ public class QueueRedisRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final DefaultRedisScript<Long> tokenBucketScript;
+    private final DefaultRedisScript<Long> admitFromHeadScript;
 
     private String queueKey(String eventId) {
         return "queue:" + eventId;
@@ -62,20 +60,17 @@ public class QueueRedisRepository {
         return score != null;
     }
 
-    public void admitFromHead(String eventId, long count) {
+    public long admitFromHead(String eventId, long count) {
         if (count <= 0) {
-            return;
+            return 0;
         }
-        Set<ZSetOperations.TypedTuple<String>> popped = redisTemplate.opsForZSet()
-                .popMin(queueKey(eventId), count);
-        if (popped != null && !popped.isEmpty()) {
-            long now = System.currentTimeMillis();
-            Set<ZSetOperations.TypedTuple<String>> admittedTuples = new java.util.LinkedHashSet<>();
-            for (ZSetOperations.TypedTuple<String> tuple : popped) {
-                admittedTuples.add(new DefaultTypedTuple<>(tuple.getValue(), (double) now));
-            }
-            redisTemplate.opsForZSet().add(admittedKey(eventId), admittedTuples);
-        }
+        Long admitted = redisTemplate.execute(
+                admitFromHeadScript,
+                Arrays.asList(queueKey(eventId), admittedKey(eventId)),
+                String.valueOf(count),
+                String.valueOf(System.currentTimeMillis())
+        );
+        return admitted != null ? admitted : 0;
     }
 
     public long removeExpiredAdmitted(String eventId, long cutoffMs) {

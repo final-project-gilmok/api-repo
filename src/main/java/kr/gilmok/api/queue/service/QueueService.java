@@ -6,6 +6,7 @@ import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.common.exception.CustomException;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,16 @@ public class QueueService {
 
     @Value("${queue.admitted-ttl-seconds:300}")
     private int admittedTtlSeconds;
+
+    @PostConstruct
+    void validateConfig() {
+        if (admissionRps <= 0) {
+            throw new IllegalStateException("queue.admission-rps must be positive, but was: " + admissionRps);
+        }
+        if (admittedTtlSeconds <= 0) {
+            throw new IllegalStateException("queue.admitted-ttl-seconds must be positive, but was: " + admittedTtlSeconds);
+        }
+    }
 
     public QueueRegisterResponse register(QueueRegisterRequest request) {
         String eventId = request.getEventId();

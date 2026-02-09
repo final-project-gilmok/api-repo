@@ -30,4 +30,12 @@ public class RedisConfig {
         script.setResultType(Long.class);
         return script;
     }
+
+    @Bean
+    public DefaultRedisScript<Long> admitFromHeadScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/admit-from-head.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
 }
