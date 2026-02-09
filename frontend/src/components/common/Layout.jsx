@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, Link } from 'react-router-dom'
 
 const navItems = [
   { to: '/admin/events', label: 'Events', icon: 'list' },
@@ -47,10 +47,10 @@ export default function Layout() {
       </aside>
       <div className="admin-main">
         <header className="admin-header">
-          <a href="/admin/events" className="d-flex align-items-center gap-2 text-decoration-none text-dark fw-semibold">
+          <Link to="/admin/events" className="d-flex align-items-center gap-2 text-decoration-none text-dark fw-semibold">
             <img src="/logo.png" alt="gilmok" width={28} height={28} />
             gilmok
-          </a>
+          </Link>
           <div className="d-flex align-items-center">
             <div className="rounded-circle bg-secondary" style={{ width: 36, height: 36 }} title="Profile" />
           </div>

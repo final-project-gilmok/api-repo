@@ -19,9 +19,20 @@ export default function EventManagement() {
 
   const handleCreate = (e) => {
     e.preventDefault()
-    if (!name.trim()) return
+    const trimmedName = name.trim()
+    const trimmedDescription = description.trim()
+    if (!trimmedName) return
     const newId = `EVT${String(events.length + 1).padStart(3, '0')}`
-    setEvents([...events, { id: newId, name: name.trim(), status: 'draft', createdAt: new Date().toISOString().slice(0, 10) }])
+    setEvents([
+      ...events,
+      {
+        id: newId,
+        name: trimmedName,
+        description: trimmedDescription,
+        status: 'draft',
+        createdAt: new Date().toISOString().slice(0, 10),
+      },
+    ])
     setName('')
     setDescription('')
   }
