@@ -7,6 +7,12 @@ const tabs = [
   { to: 'ai-recommendation', label: 'AI 추천' },
 ]
 
+/**
+ * Render the policy configuration UI for a specific event.
+ *
+ * Displays tabbed navigation and forms for mandatory and advanced policies (admission RPS, token TTL, waiting room toggle, blocking rules, simple rate limit), manages local state for each input, and derives base routes from the `eventId` route parameter.
+ * @returns {JSX.Element} The policy settings page for the current event.
+ */
 export default function PolicySettings() {
   const { eventId } = useParams()
   const base = `/admin/events/${eventId}`

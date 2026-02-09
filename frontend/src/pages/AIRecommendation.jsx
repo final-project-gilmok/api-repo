@@ -17,6 +17,14 @@ const inputSummary = [
 const blockRules = ['IP: 192.168.1.10', 'UA: MaliciousBot']
 const reasoning = '최근 트래픽 증가와 낮은 에러율을 기반으로 RPS 한도를 상향 조정하고, 세션 유지 시간을 늘려 사용자 경험을 개선합니다. 특정 IP와 User-Agent에서 비정상적인 요청 패턴이 감지되어 차단 규칙을 추가하는 것을 권장합니다.'
 
+/**
+ * Render the AI policy recommendation page showing an input summary, recommended policy values,
+ * recommended block rules, reasoning, and optional event-specific navigation tabs.
+ *
+ * The component reads `eventId` from route parameters to decide whether to display tabs.
+ *
+ * @returns {JSX.Element} The React element for the AIRecommendation page.
+ */
 export default function AIRecommendation() {
   const { eventId } = useParams()
   const showTabs = !!eventId

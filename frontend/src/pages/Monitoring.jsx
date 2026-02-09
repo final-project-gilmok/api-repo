@@ -16,6 +16,12 @@ const MOCK_METRICS = [
   { label: '현재 대기열 길이 (Current Queue Length)', value: '50명', change: '+10', updated: '10:29:59', desc: '현재 대기열에 있는 사용자 수', warn: false },
 ]
 
+/**
+ * Render the event monitoring page scoped to the current event.
+ *
+ * Renders a header showing the event ID, a tabbed navigation for event sections, and a responsive grid of metric cards (label, change indicator, value, description, and last-updated time).
+ * @returns {JSX.Element} The monitoring page React element for the event identified by the current route.
+ */
 export default function Monitoring() {
   const { eventId } = useParams()
   const path = base(eventId)

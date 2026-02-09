@@ -41,6 +41,11 @@ const quickLinks = [
   },
 ]
 
+/**
+ * Render the event detail page showing name, id, description, creation date, status badge, action buttons, and quick-management links for the current route's event.
+ *
+ * @returns {JSX.Element} The event detail view.
+ */
 export default function EventDetail() {
   const { eventId } = useParams()
   const event = { id: eventId, ...(MOCK_EVENT_BY_ID[eventId] || defaultEvent) }

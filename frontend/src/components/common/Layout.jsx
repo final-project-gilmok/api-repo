@@ -5,6 +5,15 @@ const navItems = [
   { to: '/admin/settings', label: 'Settings', icon: 'gear' },
 ]
 
+/**
+ * Render the admin layout containing a sidebar navigation and a main content area.
+ *
+ * The layout includes a NavLink-based vertical sidebar with icons and a profile link, a header
+ * with brand and profile indicator, a main content region that renders nested routes via <Outlet />,
+ * and a footer.
+ *
+ * @returns {JSX.Element} The root JSX element for the admin layout.
+ */
 export default function Layout() {
   return (
     <div className="admin-layout">

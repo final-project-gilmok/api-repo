@@ -6,6 +6,12 @@ import PolicySettings from './pages/PolicySettings'
 import Monitoring from './pages/Monitoring'
 import AIRecommendation from './pages/AIRecommendation'
 
+/**
+ * Render the application's routing structure, mounting the admin layout, nested event-related routes, AI recommendation, and placeholder settings/profile pages.
+ *
+ * Includes redirects from "/" and any unknown path to "/admin/events" and an index redirect for "/admin".
+ * @returns {JSX.Element} The root Routes element describing the app's route tree.
+ */
 export default function App() {
   return (
     <Routes>
