@@ -5,7 +5,6 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
-import kr.gilmok.common.exception.CustomException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -85,7 +84,8 @@ public class QueueService {
             return new QueueStatusResponse(QueueStatus.WAITING, position, etaSeconds, 3000);
         }
 
-        throw new CustomException("Q001", "대기열에서 찾을 수 없습니다.");
+        // Neither in queue nor admitted → expired
+        return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0);
     }
 
     public void expireAdmitted(String eventId) {

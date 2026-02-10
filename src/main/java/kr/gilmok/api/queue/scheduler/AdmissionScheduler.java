@@ -17,7 +17,7 @@ public class AdmissionScheduler {
     @Value("${queue.default-event-id:default}")
     private String defaultEventId;
 
-    @Scheduled(fixedRate = 1000)
+    @Scheduled(fixedDelay = 1000)
     public void processAdmission() {
         try {
             queueService.expireAdmitted(defaultEventId);

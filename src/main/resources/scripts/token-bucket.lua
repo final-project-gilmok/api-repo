@@ -18,7 +18,7 @@ if lastRefillMs > 0 then
     local refill = math.floor(elapsed / 1000 * maxTokens)
     if refill > 0 then
         tokens = math.min(maxTokens, tokens + refill)
-        lastRefillMs = now
+        lastRefillMs = lastRefillMs + math.floor(refill * 1000 / maxTokens)
     end
 else
     tokens = maxTokens
