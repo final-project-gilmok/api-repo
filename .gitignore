@@ -45,7 +45,6 @@ frontend/dist/
 
 ### Environment ###
 application-dev.yml
-application-prod.yml
 
 ### OS ###
 nul
