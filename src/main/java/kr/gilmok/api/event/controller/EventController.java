@@ -1,8 +1,9 @@
 package kr.gilmok.api.event.controller;
 
-import kr.gilmok.api.event.service.EventService;
+import jakarta.validation.Valid;
 import kr.gilmok.api.event.dto.EventCreateRequest;
 import kr.gilmok.api.event.dto.EventResponse;
+import kr.gilmok.api.event.service.EventService;
 import kr.gilmok.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +16,7 @@ public class EventController {
     private final EventService eventService;
 
     @PostMapping
-    public ApiResponse<EventResponse> create(@RequestBody EventCreateRequest request) {
+    public ApiResponse<EventResponse> create(@Valid @RequestBody EventCreateRequest request) {
         return eventService.createEvent(request);
     }
 
