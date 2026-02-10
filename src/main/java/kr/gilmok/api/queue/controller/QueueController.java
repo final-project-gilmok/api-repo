@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/queue")
+@RequestMapping("/queue")
 @RequiredArgsConstructor
 public class QueueController {
 

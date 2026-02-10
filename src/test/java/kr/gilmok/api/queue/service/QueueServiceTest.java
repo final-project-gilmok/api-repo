@@ -5,7 +5,6 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
-import kr.gilmok.common.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -145,16 +143,19 @@ class QueueServiceTest {
     }
 
     @Test
-    @DisplayName("상태 조회 - 대기열에 없으면 CustomException을 던진다")
-    void getStatus_notFound_throwsException() {
+    @DisplayName("상태 조회 - 대기열에도 admitted에도 없으면 EXPIRED를 반환한다")
+    void getStatus_notFound_returnsExpired() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
         given(queueRedisRepository.getRank("event1", "queue1")).willReturn(null);
 
-        // when & then
-        assertThatThrownBy(() -> queueService.getStatus("event1", "queue1"))
-                .isInstanceOf(CustomException.class)
-                .hasMessage("대기열에서 찾을 수 없습니다.");
+        // when
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(QueueStatus.EXPIRED);
+        assertThat(response.getPosition()).isEqualTo(0);
+        assertThat(response.getPollAfterMs()).isEqualTo(0);
     }
 
     // === processAdmission 테스트 ===

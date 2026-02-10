@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -36,11 +37,17 @@ class QueueRedisRepositoryIntegrationTest {
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
 
+    @Value("${queue.admitted-ttl-seconds}")
+    private int admittedTtlSeconds;
+
     private static final String EVENT_ID = "test-event";
 
     @BeforeEach
     void setUp() {
-        redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
+        redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Void>) connection -> {
+            connection.serverCommands().flushAll();
+            return null;
+        });
     }
 
     @Test
@@ -102,15 +109,16 @@ class QueueRedisRepositoryIntegrationTest {
     @DisplayName("만료된 admitted 항목만 삭제되고 유효한 항목은 남는다")
     void removeExpiredAdmitted_removesOldEntries() {
         // given — 두 사용자를 admitted에 직접 추가 (score = timestamp)
+        long ttlMs = admittedTtlSeconds * 1000L;
         long now = System.currentTimeMillis();
-        long expiredTimestamp = now - 400_000;  // 400초 전 (TTL 300초 초과)
-        long validTimestamp = now - 100_000;    // 100초 전 (TTL 300초 이내)
+        long expiredTimestamp = now - ttlMs - 100_000;  // TTL + 100초 전 (만료됨)
+        long validTimestamp = now - ttlMs + 200_000;    // TTL - 200초 전 (유효함)
 
         redisTemplate.opsForZSet().add("queue:" + EVENT_ID + ":admitted", "expired-user", expiredTimestamp);
         redisTemplate.opsForZSet().add("queue:" + EVENT_ID + ":admitted", "valid-user", validTimestamp);
 
-        // when — cutoff = now - 300초
-        long cutoffMs = now - 300_000;
+        // when — cutoff = now - TTL
+        long cutoffMs = now - ttlMs;
         long removed = queueRedisRepository.removeExpiredAdmitted(EVENT_ID, cutoffMs);
 
         // then
