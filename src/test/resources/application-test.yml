@@ -11,10 +11,6 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
-  data:
-    redis:
-      host: localhost
-      port: 6379
 
 queue:
   admission-rps: 10
