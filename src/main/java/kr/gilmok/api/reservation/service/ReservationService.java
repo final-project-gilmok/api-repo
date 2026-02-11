@@ -123,7 +123,7 @@ public class ReservationService {
         seat.reserve(reservation.getQuantity());
         reservation.confirm();
 
-        // Redis 잠금 해제 (잔여석은 복구하지 않음 - DB에서 확정됨)
+        // Redis 잠금 해제
         seatLockRedisRepository.unlockAndRestore(
                 reservation.getEvent().getId(), seat.getId(), userId
         );
