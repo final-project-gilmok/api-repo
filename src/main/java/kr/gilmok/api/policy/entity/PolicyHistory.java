@@ -41,6 +41,11 @@ public class PolicyHistory {
     @Column(columnDefinition = "TEXT")
     private BlockRules blockRules;
 
+    @Column(length = 20)
+    private String gateMode;
+
+    private Long updatedByUserId;
+
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt; // 언제 바뀌었는지 기록
@@ -56,6 +61,8 @@ public class PolicyHistory {
                 .policyVersion(policy.getPolicyVersion())
                 .maxRequestsPerSecond(policy.getMaxRequestsPerSecond())
                 .blockDurationMinutes(policy.getBlockDurationMinutes())
+                .gateMode(policy.getGateMode())
+                .updatedByUserId(policy.getUpdatedByUserId())
                 .build();
     }
 }
