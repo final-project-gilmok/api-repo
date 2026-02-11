@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -35,14 +36,19 @@ public class PolicyCacheRepository {
 
     public Optional<PolicyCacheDto> find(Long eventId) {
         String key = KEY_PREFIX + eventId;
-        String json = redisTemplate.opsForValue().get(key);
-        if (json == null || json.isBlank()) {
-            return Optional.empty();
-        }
         try {
-            return Optional.of(objectMapper.readValue(json, PolicyCacheDto.class));
-        } catch (JsonProcessingException e) {
-            log.warn("Policy cache deserialize failed: eventId={}, key={}", eventId, key, e);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json == null || json.isBlank()) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(objectMapper.readValue(json, PolicyCacheDto.class));
+            } catch (JsonProcessingException e) {
+                log.warn("Policy cache deserialize failed: eventId={}, key={}", eventId, key, e);
+                return Optional.empty();
+            }
+        } catch (DataAccessException e) {
+            log.warn("Policy cache read failed: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         }
     }
