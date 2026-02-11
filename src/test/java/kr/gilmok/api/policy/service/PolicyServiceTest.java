@@ -61,7 +61,6 @@ class PolicyServiceTest {
         void getPolicyByEventId_cacheHit_returnsFromRedis() {
             Long eventId = 1L;
             PolicyCacheDto cached = new PolicyCacheDto(true, eventId, 10, 5, 300L, 2L, BlockRules.empty(), 20, 10);
-            when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyCacheRepository.find(eventId)).thenReturn(Optional.of(cached));
 
             PolicyResponse response = policyService.getPolicyByEventId(eventId);
@@ -72,6 +71,8 @@ class PolicyServiceTest {
             assertThat(response.admissionRps()).isEqualTo(10);
             verify(policyCacheRepository).find(eventId);
             verify(policyRepository, never()).findByEventId(any());
+            verify(eventRepository, never()).existsById(any());
+
         }
 
         @Test
@@ -79,7 +80,6 @@ class PolicyServiceTest {
         void getPolicyByEventId_cacheMiss_loadsFromDbAndCaches() {
             Long eventId = 1L;
             Policy policy = new Policy(eventId);
-            when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyCacheRepository.find(eventId)).thenReturn(Optional.empty());
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
 
@@ -91,6 +91,8 @@ class PolicyServiceTest {
             verify(policyCacheRepository).find(eventId);
             verify(policyRepository).findByEventId(eventId);
             verify(policyCacheRepository).save(eq(eventId), any(PolicyCacheDto.class));
+            verify(eventRepository, never()).existsById(any());
+
         }
 
         @Test
@@ -131,7 +133,6 @@ class PolicyServiceTest {
         void getPolicyByEventId_negativeCacheHit_throwsPolicyNotFound() {
             Long eventId = 1L;
             PolicyCacheDto negativeCached = PolicyCacheDto.negative(eventId);
-            when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyCacheRepository.find(eventId)).thenReturn(Optional.of(negativeCached));
 
             assertThatThrownBy(() -> policyService.getPolicyByEventId(eventId))
@@ -139,6 +140,8 @@ class PolicyServiceTest {
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(PolicyErrorCode.POLICY_NOT_FOUND));
             verify(policyRepository, never()).findByEventId(any());
+            verify(eventRepository, never()).existsById(any());
+
         }
     }
 
