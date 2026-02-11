@@ -12,5 +12,9 @@ server:
 # 큐 관련 설정도 공통이라면 여기에 (환경별로 다르면 아래로 이동)
 queue:
   admission-rps: 10
-  default-event-id: default
+  default-event-id: 1
   admitted-ttl-seconds: 300
+
+reservation:
+  seat-lock-ttl-seconds: 300
+  max-quantity: 4
