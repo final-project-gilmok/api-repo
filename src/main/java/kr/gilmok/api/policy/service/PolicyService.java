@@ -52,10 +52,13 @@ public class PolicyService {
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
-        Policy policy = policyRepository.findByEventId(eventId)
-                .orElse(new Policy(eventId));
+        Optional<Policy> existingPolicy = policyRepository.findByEventId(eventId);
+        Policy policy = existingPolicy.orElse(new Policy(eventId));
 
-        historyRepository.save(PolicyHistory.from(policy));
+        // 기존 정책이 있을 때만 이전 상태를 히스토리에 저장
+        if (existingPolicy.isPresent()) {
+            historyRepository.save(PolicyHistory.from(policy));
+        }
 
         // TODO(auth): 연동 후 updatedByUserId 전달 (현재 null)
         policy.updatePolicy(
@@ -109,11 +112,19 @@ public class PolicyService {
 
         Optional<Policy> policyOpt = policyRepository.findByEventId(eventId);
         if (policyOpt.isEmpty()) {
-            policyCacheRepository.save(eventId, PolicyCacheDto.negative(eventId));
+            try {
+                policyCacheRepository.save(eventId, PolicyCacheDto.negative(eventId));
+            } catch (Exception e) {
+                log.warn("Redis negative cache save failed: eventId={}", eventId, e);
+            }
             throw new CustomException(PolicyErrorCode.POLICY_NOT_FOUND);
         }
         Policy policy = policyOpt.get();
-        policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
+        try {
+            policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
+        } catch (Exception e) {
+            log.warn("Redis policy cache save failed: eventId={}", eventId, e);
+        }
         return PolicyResponse.from(policy);
     }
 
