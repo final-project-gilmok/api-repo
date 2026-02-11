@@ -1,8 +1,10 @@
 package kr.gilmok.api.event.service;
 
 import kr.gilmok.api.event.dto.EventCreateRequest;
+import kr.gilmok.api.event.dto.EventListResponse;
 import kr.gilmok.api.event.dto.EventResponse;
 import kr.gilmok.api.event.entity.Event;
+import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.common.dto.ApiResponse;
@@ -10,6 +12,8 @@ import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +48,13 @@ public class EventService {
         Event event = findEventById(eventId);
         event.close();
         return ApiResponse.success(new EventResponse(event.getId(), event.getStatus()));
+    }
+
+    public List<EventListResponse> getOpenEvents() {
+        return eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN)
+                .stream()
+                .map(EventListResponse::from)
+                .toList();
     }
 
     public ApiResponse<EventResponse> getEvent(Long eventId) {

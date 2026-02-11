@@ -1,0 +1,252 @@
+package kr.gilmok.api.reservation.service;
+
+import kr.gilmok.api.event.entity.Event;
+import kr.gilmok.api.event.repository.EventRepository;
+import kr.gilmok.api.queue.repository.QueueRedisRepository;
+import kr.gilmok.api.reservation.dto.ReservationCreateRequest;
+import kr.gilmok.api.reservation.dto.ReservationResponse;
+import kr.gilmok.api.reservation.entity.Reservation;
+import kr.gilmok.api.reservation.entity.ReservationStatus;
+import kr.gilmok.api.reservation.entity.Seat;
+import kr.gilmok.api.reservation.exception.ReservationErrorCode;
+import kr.gilmok.api.reservation.repository.ReservationRepository;
+import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
+import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.common.exception.CustomException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.lang.reflect.Field;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("ReservationService 단위 테스트")
+class ReservationServiceTest {
+
+    @Mock
+    private ReservationRepository reservationRepository;
+    @Mock
+    private SeatRepository seatRepository;
+    @Mock
+    private EventRepository eventRepository;
+    @Mock
+    private SeatLockRedisRepository seatLockRedisRepository;
+    @Mock
+    private QueueRedisRepository queueRedisRepository;
+
+    @InjectMocks
+    private ReservationService reservationService;
+
+    @BeforeEach
+    void setUp() {
+        setField(reservationService, "seatLockTtlSeconds", 300);
+        setField(reservationService, "maxQuantity", 4);
+    }
+
+    private Event createEvent(Long id) {
+        Event event = Event.builder()
+                .name("테스트 이벤트")
+                .description("설명")
+                .startsAt(LocalDateTime.now())
+                .endsAt(LocalDateTime.now().plusDays(7))
+                .build();
+        setField(event, "id", id);
+        return event;
+    }
+
+    private Seat createSeat(Long id, Event event) {
+        Seat seat = Seat.builder()
+                .event(event)
+                .section("VIP")
+                .totalCount(100)
+                .price(150000)
+                .build();
+        setField(seat, "id", id);
+        return seat;
+    }
+
+    private Reservation createReservation(Long id, Event event, Seat seat, Long userId) {
+        Reservation reservation = Reservation.builder()
+                .event(event)
+                .seat(seat)
+                .userId(userId)
+                .quantity(2)
+                .build();
+        setField(reservation, "id", id);
+        return reservation;
+    }
+
+    private static void setField(Object target, String fieldName, Object value) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Nested
+    @DisplayName("예약 생성")
+    class CreateReservation {
+
+        @Test
+        @DisplayName("대기열 통과 + 잔여석 있으면 HOLDING 예약이 생성된다")
+        void create_success() {
+            // given
+            Long userId = 1L;
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
+
+            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+            when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
+            when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
+            when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // when
+            ReservationResponse response = reservationService.createReservation(userId, request);
+
+            // then
+            assertThat(response.status()).isEqualTo(ReservationStatus.HOLDING);
+            assertThat(response.quantity()).isEqualTo(2);
+            assertThat(response.reservationCode()).isNotNull();
+            verify(seatLockRedisRepository).lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt());
+        }
+
+        @Test
+        @DisplayName("대기열 미통과 시 NOT_ADMITTED 예외가 발생한다")
+        void create_notAdmitted_throwsException() {
+            // given
+            Long userId = 1L;
+            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
+            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.NOT_ADMITTED));
+        }
+
+        @Test
+        @DisplayName("Redis 좌석 잠금 실패 시 SEAT_LOCK_FAILED 예외가 발생한다")
+        void create_lockFailed_throwsException() {
+            // given
+            Long userId = 1L;
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
+
+            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+            when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
+            when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.SEAT_LOCK_FAILED));
+        }
+    }
+
+    @Nested
+    @DisplayName("예약 확정")
+    class ConfirmReservation {
+
+        @Test
+        @DisplayName("HOLDING 예약을 확정하면 CONFIRMED 상태로 변경된다")
+        void confirm_success() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+
+            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+            when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
+
+            // when
+            ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode());
+
+            // then
+            assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
+            verify(seatRepository).findByIdForUpdate(10L);
+        }
+
+        @Test
+        @DisplayName("다른 사용자의 예약 확정 시 UNAUTHORIZED 예외가 발생한다")
+        void confirm_unauthorized_throwsException() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+
+            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.confirmReservation(999L, reservation.getReservationCode()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.UNAUTHORIZED));
+        }
+    }
+
+    @Nested
+    @DisplayName("예약 취소")
+    class CancelReservation {
+
+        @Test
+        @DisplayName("HOLDING 예약 취소 시 Redis 잠금이 해제되고 CANCELLED 상태로 변경된다")
+        void cancel_holding_restoresRedis() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+
+            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+
+            // when
+            ReservationResponse response = reservationService.cancelReservation(1L, reservation.getReservationCode());
+
+            // then
+            assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+            verify(seatLockRedisRepository).unlockAndRestore(1L, 10L, 1L);
+        }
+
+        @Test
+        @DisplayName("이미 취소된 예약을 다시 취소하면 ALREADY_CANCELLED 예외가 발생한다")
+        void cancel_alreadyCancelled_throwsException() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+            reservation.cancel();
+
+            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.cancelReservation(1L, reservation.getReservationCode()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.ALREADY_CANCELLED));
+        }
+    }
+}

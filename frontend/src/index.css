@@ -159,3 +159,10 @@ body {
   border-bottom: 1px solid #dee2e6;
   gap: 0.25rem;
 }
+
+/* User layout */
+.user-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
