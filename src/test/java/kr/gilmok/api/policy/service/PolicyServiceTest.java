@@ -94,17 +94,20 @@ class PolicyServiceTest {
         }
 
         @Test
-        @DisplayName("event가 없으면 EVENT_NOT_FOUND 예외가 발생한다")
+        @DisplayName("캐시 미스 후 event가 없으면 EVENT_NOT_FOUND 예외가 발생한다")
         void getPolicyByEventId_eventNotExists_throwsEventNotFound() {
             Long eventId = 999L;
+            when(policyCacheRepository.find(eventId)).thenReturn(Optional.empty());
+            when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
             when(eventRepository.existsById(eventId)).thenReturn(false);
 
             assertThatThrownBy(() -> policyService.getPolicyByEventId(eventId))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
-            verify(policyCacheRepository, never()).find(anyLong());
-            verify(policyRepository, never()).findByEventId(any());
+            verify(policyCacheRepository).find(eventId);
+            verify(policyRepository).findByEventId(eventId);
+            verify(eventRepository).existsById(eventId);
         }
 
         @Test

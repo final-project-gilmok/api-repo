@@ -98,14 +98,10 @@ public class PolicyService {
     }
 
 
-/*     정책 조회. Cache-Aside: Redis 확인 → 없으면 DB 조회 후 Redis 저장.
+/*     정책 조회. Cache-Aside: Redis 우선 조회 → 미스 시에만 DB, 이벤트 검증.
      negative 캐시(exists=false): 정책 없음을 짧은 TTL로 캐시해 캐시 관통 방지.*/
     @Transactional(readOnly = true)
     public PolicyResponse getPolicyByEventId(Long eventId) {
-        if (!eventRepository.existsById(eventId)) {
-            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
-        }
-
         Optional<PolicyCacheDto> cached;
         try {
             cached = policyCacheRepository.find(eventId);
@@ -123,6 +119,9 @@ public class PolicyService {
 
         Optional<Policy> policyOpt = policyRepository.findByEventId(eventId);
         if (policyOpt.isEmpty()) {
+            if (!eventRepository.existsById(eventId)) {
+                throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+            }
             try {
                 policyCacheRepository.save(eventId, PolicyCacheDto.negative(eventId));
             } catch (Exception e) {
