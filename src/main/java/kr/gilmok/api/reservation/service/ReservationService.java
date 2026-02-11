@@ -101,7 +101,7 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse confirmReservation(Long userId, String reservationCode) {
-        Reservation reservation = reservationRepository.findByReservationCode(reservationCode)
+        Reservation reservation = reservationRepository.findByReservationCodeForUpdate(reservationCode)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.RESERVATION_NOT_FOUND));
 
         if (!reservation.getUserId().equals(userId)) {
@@ -115,6 +115,12 @@ public class ReservationService {
         if (reservation.getStatus() == ReservationStatus.CANCELLED) {
             throw new CustomException(ReservationErrorCode.ALREADY_CANCELLED);
         }
+
+        if (reservation.getCreatedAt().plusSeconds(seatLockTtlSeconds)
+            .isBefore(java.time.LocalDateTime.now())) {
+            throw new CustomException(ReservationErrorCode
+                    .RESERVATION_EXPIRED);
+            }
 
         // MySQL 비관적 잠금으로 좌석 예약 확정
         Seat seat = seatRepository.findByIdForUpdate(reservation.getSeat().getId())
@@ -139,7 +145,7 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse cancelReservation(Long userId, String reservationCode) {
-        Reservation reservation = reservationRepository.findByReservationCode(reservationCode)
+        Reservation reservation = reservationRepository.findByReservationCodeForUpdate(reservationCode)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.RESERVATION_NOT_FOUND));
 
         if (!reservation.getUserId().equals(userId)) {

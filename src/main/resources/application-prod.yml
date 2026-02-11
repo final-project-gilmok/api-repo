@@ -4,15 +4,26 @@ spring:
       on-profile: prod
 
   datasource:
-    # 도커 컨테이너 내부 통신을 위해 서비스명(mysql-server) 사용 가능
-    url: jdbc:mysql://${DB_URL:mysql-server}:3306/gilmok_db
-    username: ${DB_USERNAME} # 시크릿에서 주입됨
-    password: ${DB_PASSWORD} # 시크릿에서 주입됨
+    # [수정] URL을 조립하지 않고, 환경변수(DB_URL)를 그대로 사용
+    # GitHub Secrets의 DB_URL에 "jdbc:mysql://..." 전체가 들어있어야 함
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # [추가] Redis 설정 (운영 환경)
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true} # 기본값 true
 
   jpa:
     hibernate:
-      ddl-auto: validate # 운영용: 스키마 변경 금지 (안전제일)
+      ddl-auto: validate # 운영에선 스키마 변경 금지
     properties:
       hibernate:
-        format_sql: false # 로그 간소화
+        format_sql: false # 운영 로그 깔끔하게
+        show_sql: false   # 쿼리 로그도 끄는 것 권장 (성능/보안)
