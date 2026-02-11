@@ -164,14 +164,14 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
-            when(policyRepository.save(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
             Long version = policyService.updatePolicy(eventId, request);
 
             assertThat(version).isEqualTo(1L);
-            verify(historyRepository).save(any());
+            verify(historyRepository, never()).save(any());
             verify(policyRepository).findByEventId(eventId);
-            verify(policyRepository).save(any(Policy.class));
+            verify(policyRepository).saveAndFlush(any(Policy.class));
             verify(policyCacheRepository).save(eq(eventId), any());
         }
 
@@ -183,13 +183,13 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, 600L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
-            when(policyRepository.save(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
             Long version = policyService.updatePolicy(eventId, request);
 
             assertThat(version).isEqualTo(1L);
             verify(historyRepository).save(any());
-            verify(policyRepository).save(any(Policy.class));
+            verify(policyRepository).saveAndFlush(any(Policy.class));
             verify(policyCacheRepository).save(eq(eventId), any());
         }
 
@@ -201,7 +201,7 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, 600L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
-            when(policyRepository.save(any(Policy.class))).thenThrow(new OptimisticLockException());
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new OptimisticLockException());
 
             assertThatThrownBy(() -> policyService.updatePolicy(eventId, request))
                     .isInstanceOf(CustomException.class)
