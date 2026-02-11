@@ -87,7 +87,11 @@ public class PolicyService {
 
         // 실시간 반영을 위한 메시지 발행 (Rabbit 활성화 시)
         if (rabbitTemplate != null) {
-            rabbitTemplate.convertAndSend("policy.exchange", "policy.updated", policy.getEventId());
+            try {
+                rabbitTemplate.convertAndSend("policy.exchange", "policy.updated", policy.getEventId());
+            } catch (Exception e) {
+                log.warn("Policy update message publish failed: eventId={}", eventId, e);
+            }
         }
 
         return policy.getPolicyVersion();
