@@ -18,6 +18,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,8 +73,8 @@ public class PolicyService {
                 request.blockDurationMinutes()
         );
         try {
-            policyRepository.save(policy);
-        } catch (OptimisticLockException e) {
+            policyRepository.saveAndFlush(policy);
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
             log.warn("Policy update conflict: eventId={}", eventId, e);
             throw new CustomException(PolicyErrorCode.POLICY_CONFLICT);
         }
@@ -101,7 +102,13 @@ public class PolicyService {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
 
-        Optional<PolicyCacheDto> cached = policyCacheRepository.find(eventId);
+        Optional<PolicyCacheDto> cached;
+        try {
+            cached = policyCacheRepository.find(eventId);
+        } catch (Exception e) {
+            log.warn("Redis policy cache read failed: eventId={}", eventId, e);
+            cached = Optional.empty();
+        }
         if (cached.isPresent()) {
             PolicyCacheDto dto = cached.get();
             if (!dto.exists()) {
@@ -130,14 +137,18 @@ public class PolicyService {
 
     @Transactional(readOnly = true)
     public MetricsResponse getMetrics(Long eventId) {
-        // Mock 데이터 반환
+        if (!eventRepository.existsById(eventId)) {
+            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+        }
         return MetricsResponse.mock();
     }
 
     // AI 추천 조회
     @Transactional(readOnly = true)
     public AiRecommendationResponse getAiRecommendation(Long eventId) {
-        // Mock 데이터 반환
+        if (!eventRepository.existsById(eventId)) {
+            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+        }
         return AiRecommendationResponse.mock();
     }
 
