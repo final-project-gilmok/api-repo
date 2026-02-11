@@ -57,9 +57,17 @@ public class ReservationService {
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.EVENT_NOT_FOUND));
 
+        if (!event.isOpen()) {
+            throw new CustomException(ReservationErrorCode.EVENT_NOT_OPEN);
+        }
+
         // 좌석 확인
         Seat seat = seatRepository.findById(request.seatId())
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.SEAT_NOT_FOUND));
+        // 좌석이 해당 이벤트에 속하는지 검증
+        if (!seat.getEvent().getId().equals(request.eventId())) {
+            throw new CustomException(ReservationErrorCode.SEAT_NOT_BELONG_TO_EVENT);
+        }
 
         // Redis 좌석 잠금 (원자적)
         boolean locked = seatLockRedisRepository.lock(
@@ -70,15 +78,20 @@ public class ReservationService {
             throw new CustomException(ReservationErrorCode.SEAT_LOCK_FAILED);
         }
 
+        Reservation saved;
+        try {
         // 예약 생성 (HOLDING 상태)
-        Reservation reservation = Reservation.builder()
-                .event(event)
-                .seat(seat)
-                .userId(userId)
-                .quantity(request.quantity())
-                .build();
-
-        Reservation saved = reservationRepository.save(reservation);
+            Reservation reservation = Reservation.builder()
+            .event(event)
+            .seat(seat).userId(userId)
+            .quantity(request.quantity())
+            .build();
+            saved = reservationRepository.save(reservation);
+        } catch (Exception e) {
+           // DB 저장 실패 시 Redis 잠금 해제
+           seatLockRedisRepository.unlockAndRestore(request.eventId(), request.seatId(), userId);
+            throw e;
+        }
 
         log.info("Reservation created: code={}, eventId={}, seatId={}, userId={}, qty={}",
                 saved.getReservationCode(), request.eventId(), request.seatId(), userId, request.quantity());

@@ -23,7 +23,10 @@ export default function QueueWaiting() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eventId, sessionKey }),
     })
-      .then((res) => res.json())
+        .then((res) => {
+            if (!res.ok) throw new Error('등록 실패')
+            return res.json()
+            })
       .then((data) => {
         const d = data.data || data
         setQueueKey(d.queueKey)
@@ -40,7 +43,10 @@ export default function QueueWaiting() {
 
     const poll = () => {
       fetch(`${API_BASE}/queue/status?eventId=${eventId}&queueKey=${queueKey}`)
-        .then((res) => res.json())
+          .then((res) => {
+              if (!res.ok) throw new Error('상태 조회 실패')
+              return res.json()
+              })
         .then((data) => {
           const d = data.data || data
           setStatus(d.status)

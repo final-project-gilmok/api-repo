@@ -26,5 +26,5 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     long countByEventIdAndStatus(@Param("eventId") Long eventId, @Param("status") ReservationStatus status);
 
     @Query("SELECT COALESCE(SUM(r.quantity), 0) FROM Reservation r WHERE r.event.id = :eventId AND r.status = :status")
-    int sumQuantityByEventIdAndStatus(@Param("eventId") Long eventId, @Param("status") ReservationStatus status);
+    long sumQuantityByEventIdAndStatus(@Param("eventId") Long eventId, @Param("status") ReservationStatus status);
 }

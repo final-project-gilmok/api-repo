@@ -48,7 +48,10 @@ export default function ReservationConfirm() {
       method: 'POST',
       headers: { 'X-User-Id': userId },
     })
-      .then((res) => res.json())
+        .then((res) => {
+            if (!res.ok) throw new Error('확정 요청 실패')
+            return res.json()
+            })
       .then((data) => {
         if (data.status === 'error') {
           setError(data.message || '확정 실패')
@@ -69,7 +72,10 @@ export default function ReservationConfirm() {
       method: 'DELETE',
       headers: { 'X-User-Id': userId },
     })
-      .then(() => navigate(`/events/${eventId}/seats`))
+        .then((res) => {
+            if (!res.ok) throw new Error('취소 실패')
+            navigate(`/events/${eventId}/seats`)
+            })
       .catch(() => setError('취소 실패'))
   }
 

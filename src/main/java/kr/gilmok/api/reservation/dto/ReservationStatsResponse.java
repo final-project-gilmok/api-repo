@@ -5,7 +5,7 @@ public record ReservationStatsResponse(
         long holdingCount,
         long confirmedCount,
         long cancelledCount,
-        int holdingQuantity,
-        int confirmedQuantity,
-        int cancelledQuantity
+        long holdingQuantity,
+        long confirmedQuantity,
+        long cancelledQuantity
 ) {}

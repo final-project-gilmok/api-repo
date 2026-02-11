@@ -39,12 +39,16 @@ export default function MyReservations() {
     })
       .then((res) => res.json())
       .then((data) => {
+          if (data.status === 'error') {
+              alert(data.message || '취소에 실패했습니다.')
+              return }
         if (data.data) {
           setReservations((prev) =>
             prev.map((r) => (r.reservationCode === code ? data.data : r))
           )
         }
       })
+        .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
   }
 
   if (loading) {

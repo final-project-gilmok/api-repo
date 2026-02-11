@@ -53,6 +53,9 @@ public class SeatService {
     public SeatResponse updateSeat(Long eventId, Long seatId, SeatUpdateRequest request) {
         Seat seat = seatRepository.findById(seatId)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.SEAT_NOT_FOUND));
+        if (!seat.getEvent().getId().equals(eventId)) {
+        throw new CustomException(ReservationErrorCode.SEAT_NOT_FOUND);
+        }
 
         seat.update(request.section(), request.totalCount(), request.price());
         return SeatResponse.from(seat);
@@ -62,6 +65,9 @@ public class SeatService {
     public void deleteSeat(Long eventId, Long seatId) {
         Seat seat = seatRepository.findById(seatId)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.SEAT_NOT_FOUND));
+        if (!seat.getEvent().getId().equals(eventId)) {
+            throw new CustomException(ReservationErrorCode.SEAT_NOT_FOUND);
+        }
 
         seatLockRedisRepository.deleteAvailable(eventId, seatId);
         seatRepository.delete(seat);

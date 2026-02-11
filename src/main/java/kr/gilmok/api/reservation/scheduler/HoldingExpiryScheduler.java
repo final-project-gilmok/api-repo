@@ -38,11 +38,16 @@ public class HoldingExpiryScheduler {
                 reservation.cancel();
 
                 // Redis 잔여석 복구
-                seatLockRedisRepository.unlockAndRestore(
-                        reservation.getEvent().getId(),
-                        reservation.getSeat().getId(),
-                        reservation.getUserId()
-                );
+                try {
+                    seatLockRedisRepository.unlockAndRestore(
+                            reservation.getEvent().getId(),
+                            reservation.getSeat().getId(),
+                            reservation.getUserId()
+                              );
+                } catch (Exception e) {
+                    log.warn("Failed to restore Redis seat lock: code={}, error={}",
+                    reservation.getReservationCode(), e.getMessage());
+                }
 
                 log.info("HOLDING expired → CANCELLED: code={}, userId={}",
                         reservation.getReservationCode(), reservation.getUserId());

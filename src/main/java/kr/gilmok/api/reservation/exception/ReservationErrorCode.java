@@ -18,7 +18,9 @@ public enum ReservationErrorCode implements ErrorCode {
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "R007", "이벤트를 찾을 수 없습니다."),
     INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "R008", "예약 수량이 유효하지 않습니다."),
     UNAUTHORIZED(HttpStatus.FORBIDDEN, "R009", "해당 예약에 대한 권한이 없습니다."),
-    SEAT_LOCK_FAILED(HttpStatus.CONFLICT, "R010", "좌석 선점에 실패했습니다. 다시 시도해주세요.");
+    SEAT_LOCK_FAILED(HttpStatus.CONFLICT, "R010", "좌석 선점에 실패했습니다. 다시 시도해주세요."),
+    EVENT_NOT_OPEN(HttpStatus.BAD_REQUEST, "R011", "현재 이벤트가 오픈되지 않았습니다."),
+    SEAT_NOT_BELONG_TO_EVENT(HttpStatus.BAD_REQUEST, "R012", "해당 이벤트에 속하지 않는 좌석입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

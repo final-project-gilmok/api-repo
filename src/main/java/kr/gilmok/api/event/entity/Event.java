@@ -46,6 +46,10 @@ public class Event {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public boolean isOpen() {
+        return this.status == EventStatus.OPEN;
+    }
+
     public void open() {
         this.status = EventStatus.OPEN;
         this.updatedAt = LocalDateTime.now();

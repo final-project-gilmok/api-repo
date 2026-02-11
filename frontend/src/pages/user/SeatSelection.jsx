@@ -73,7 +73,10 @@ export default function SeatSelection() {
       <SeatMap
         seats={seats}
         selectedSeatId={selectedSeat?.seatId}
-        onSelect={setSelectedSeat}
+        onSelect={(seat) => {
+            setSelectedSeat(seat)
+            setQuantity(1)
+            }}
       />
 
       {selectedSeat && (
