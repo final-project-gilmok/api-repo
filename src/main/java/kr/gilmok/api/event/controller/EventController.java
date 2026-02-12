@@ -8,12 +8,19 @@ import kr.gilmok.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/admin/events")
 @RequiredArgsConstructor
 public class EventController {
 
     private final EventService eventService;
+
+    @GetMapping
+    public ApiResponse<List<EventResponse>> list() {
+        return eventService.getEvents();
+    }
 
     @PostMapping
     public ApiResponse<EventResponse> create(@Valid @RequestBody EventCreateRequest request) {

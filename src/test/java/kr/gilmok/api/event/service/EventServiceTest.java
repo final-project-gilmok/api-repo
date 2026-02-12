@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -137,6 +138,59 @@ class EventServiceTest {
             assertThat(response.getData().status()).isEqualTo(EventStatus.CLOSED);
 
             verify(eventRepository).findById(eventId);
+        }
+    }
+
+    @Nested
+    @DisplayName("이벤트 목록 조회")
+    class GetEvents {
+
+        @Test
+        @DisplayName("getEvents() 호출 시 생성일 기준 내림차순 목록을 반환한다")
+        void getEvents_returnsOrderedList() {
+            // given
+            LocalDateTime base = LocalDateTime.now();
+            Event event1 = Event.builder()
+                    .name("첫 번째")
+                    .description("설명1")
+                    .startsAt(base)
+                    .endsAt(base.plusDays(1))
+                    .demoUrl(null)
+                    .build();
+            Event event2 = Event.builder()
+                    .name("두 번째")
+                    .description("설명2")
+                    .startsAt(base)
+                    .endsAt(base.plusDays(1))
+                    .demoUrl(null)
+                    .build();
+            setEventId(event1, 1L);
+            setEventId(event2, 2L);
+            when(eventRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(event1, event2));
+
+            // when
+            ApiResponse<List<EventResponse>> response = eventService.getEvents();
+
+            // then
+            assertThat(response.getStatus()).isEqualTo("success");
+            assertThat(response.getData()).hasSize(2);
+            assertThat(response.getData().get(0).eventId()).isEqualTo(1L);
+            assertThat(response.getData().get(0).name()).isEqualTo("첫 번째");
+            assertThat(response.getData().get(1).eventId()).isEqualTo(2L);
+            assertThat(response.getData().get(1).name()).isEqualTo("두 번째");
+            verify(eventRepository).findAllByOrderByCreatedAtDesc();
+        }
+
+        @Test
+        @DisplayName("이벤트가 없으면 빈 목록을 반환한다")
+        void getEvents_emptyList() {
+            when(eventRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of());
+
+            ApiResponse<List<EventResponse>> response = eventService.getEvents();
+
+            assertThat(response.getStatus()).isEqualTo("success");
+            assertThat(response.getData()).isEmpty();
+            verify(eventRepository).findAllByOrderByCreatedAtDesc();
         }
     }
 
