@@ -50,6 +50,13 @@ export default function PolicySettings() {
     setLoading(true)
     setError(null)
     setNoPolicyYet(false)
+    setPolicyVersion(null)
+    setAdmissionRps('100')
+    setAdmissionConcurrency('5')
+    setTokenTtl('3600')
+    setBlockingRules('')
+    setMaxRequestsPerSecond('100')
+    setBlockDurationMinutes('10')
     getPolicy(eventId)
       .then((data) => {
         if (data) {
@@ -66,6 +73,7 @@ export default function PolicySettings() {
       .catch((e) => {
         if (e.status === 404) {
           setNoPolicyYet(true)
+          setPolicyVersion(null)
         } else {
           setError(e.message || '정책을 불러오지 못했습니다.')
         }
