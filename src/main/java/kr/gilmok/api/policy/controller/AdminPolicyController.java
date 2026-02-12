@@ -38,7 +38,7 @@ public class AdminPolicyController {
         return ApiResponse.success(response);
     }
 
-    @GetMapping("/recommendation")
+    @GetMapping("/ai")
     public ApiResponse<AiRecommendationResponse> getAiRecommendation(@PathVariable Long eventId) {
         AiRecommendationResponse response = policyService.getAiRecommendation(eventId);
         return ApiResponse.success(response);
