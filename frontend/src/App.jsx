@@ -1,12 +1,13 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/common/Layout'
 import UserLayout from './components/common/UserLayout'
-import EventManagement from './pages/EventManagement'
-import EventDetail from './pages/EventDetail'
-import PolicySettings from './pages/PolicySettings'
-import Monitoring from './pages/Monitoring'
-import AIRecommendation from './pages/AIRecommendation'
-import AdminReservations from './pages/AdminReservations'
+import EventManagement from './pages/admin/EventManagement.jsx'
+import EventDetail from './pages/admin/EventDetail.jsx'
+import PolicySettings from './pages/admin/PolicySettings.jsx'
+import Monitoring from './pages/admin/Monitoring.jsx'
+import AIRecommendation from './pages/admin/AIRecommendation.jsx'
+import AdminReservations from './pages/admin/AdminReservations.jsx'
+import AdminSeatManagement from './pages/admin/AdminSeatManagement.jsx'
 import EventList from './pages/user/EventList'
 import UserEventDetail from './pages/user/UserEventDetail'
 import QueueWaiting from './pages/user/QueueWaiting'
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="events/:eventId" element={<EventDetail />} />
         <Route path="events/:eventId/policy" element={<PolicySettings />} />
         <Route path="events/:eventId/monitoring" element={<Monitoring />} />
+        <Route path="events/:eventId/seats" element={<AdminSeatManagement />} />
         <Route path="events/:eventId/reservations" element={<AdminReservations />} />
         <Route path="events/:eventId/ai-recommendation" element={<AIRecommendation />} />
         <Route path="ai-recommendation" element={<AIRecommendation />} />

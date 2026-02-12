@@ -33,21 +33,21 @@ public class EventService {
                 .build();
 
         Event saved = eventRepository.save(event);
-        return ApiResponse.success(new EventResponse(saved.getId(), saved.getStatus()));
+        return ApiResponse.success(EventResponse.from(saved));
     }
 
     @Transactional
     public ApiResponse<EventResponse> openEvent(Long eventId) {
         Event event = findEventById(eventId);
         event.open(); // 엔티티 내부 비즈니스 메서드 호출
-        return ApiResponse.success(new EventResponse(event.getId(), event.getStatus()));
+        return ApiResponse.success(EventResponse.from(event));
     }
 
     @Transactional
     public ApiResponse<EventResponse> closeEvent(Long eventId) {
         Event event = findEventById(eventId);
         event.close();
-        return ApiResponse.success(new EventResponse(event.getId(), event.getStatus()));
+        return ApiResponse.success(EventResponse.from(event));
     }
 
     public List<EventListResponse> getOpenEvents() {
@@ -59,7 +59,14 @@ public class EventService {
 
     public ApiResponse<EventResponse> getEvent(Long eventId) {
         Event event = findEventById(eventId);
-        return ApiResponse.success(new EventResponse(event.getId(), event.getStatus()));
+        return ApiResponse.success(EventResponse.from(event));
+    }
+
+    public ApiResponse<List<EventResponse>> getEvents() {
+        List<EventResponse> list = eventRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(EventResponse::from)
+                .toList();
+        return ApiResponse.success(list);
     }
 
     private Event findEventById(Long eventId) {
