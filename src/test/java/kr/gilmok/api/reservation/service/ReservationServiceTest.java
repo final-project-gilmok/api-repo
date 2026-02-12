@@ -63,6 +63,7 @@ class ReservationServiceTest {
                 .endsAt(LocalDateTime.now().plusDays(7))
                 .build();
         setField(event, "id", id);
+        event.open(); // 피드백: isOpen() 검증을 위해 OPEN 상태로
         return event;
     }
 
@@ -103,7 +104,7 @@ class ReservationServiceTest {
     class CreateReservation {
 
         @Test
-        @DisplayName("대기열 통과 + 잔여석 있으면 HOLDING 예약이 생성된다")
+        @DisplayName("대기열 통과 + 이벤트 OPEN + 잔여석 있으면 HOLDING 예약이 생성된다")
         void create_success() {
             // given
             Long userId = 1L;
@@ -143,6 +144,49 @@ class ReservationServiceTest {
         }
 
         @Test
+        @DisplayName("이벤트가 OPEN이 아니면 EVENT_NOT_OPEN 예외가 발생한다")
+        void create_eventNotOpen_throwsException() {
+            // given
+            Long userId = 1L;
+            Event event = Event.builder()
+                    .name("테스트").description("설명")
+                    .startsAt(LocalDateTime.now()).endsAt(LocalDateTime.now().plusDays(1))
+                    .build(); // DRAFT 상태
+            setField(event, "id", 1L);
+            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
+
+            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.EVENT_NOT_OPEN));
+        }
+
+        @Test
+        @DisplayName("좌석이 해당 이벤트에 속하지 않으면 SEAT_NOT_BELONG_TO_EVENT 예외가 발생한다")
+        void create_seatNotBelongToEvent_throwsException() {
+            // given
+            Long userId = 1L;
+            Event event = createEvent(1L);
+            Event otherEvent = createEvent(99L);
+            Seat seat = createSeat(10L, otherEvent); // 다른 이벤트의 좌석
+            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
+
+            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+            when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.SEAT_NOT_BELONG_TO_EVENT));
+        }
+
+        @Test
         @DisplayName("Redis 좌석 잠금 실패 시 SEAT_LOCK_FAILED 예외가 발생한다")
         void create_lockFailed_throwsException() {
             // given
@@ -176,7 +220,7 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             Reservation reservation = createReservation(1L, event, seat, 1L);
 
-            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
             when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
 
@@ -196,7 +240,7 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             Reservation reservation = createReservation(1L, event, seat, 1L);
 
-            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
 
             // when & then
@@ -204,6 +248,26 @@ class ReservationServiceTest {
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.UNAUTHORIZED));
+        }
+
+        @Test
+        @DisplayName("선점 시간이 만료된 예약 확정 시 RESERVATION_EXPIRED 예외가 발생한다")
+        void confirm_expired_throwsException() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+            // createdAt을 6분 전으로 설정 (TTL 300초 초과)
+            setField(reservation, "createdAt", LocalDateTime.now().minusSeconds(360));
+
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.confirmReservation(1L, reservation.getReservationCode()))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(ReservationErrorCode.RESERVATION_EXPIRED));
         }
     }
 
@@ -219,7 +283,7 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             Reservation reservation = createReservation(1L, event, seat, 1L);
 
-            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
 
             // when
@@ -239,7 +303,7 @@ class ReservationServiceTest {
             Reservation reservation = createReservation(1L, event, seat, 1L);
             reservation.cancel();
 
-            when(reservationRepository.findByReservationCode(reservation.getReservationCode()))
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
 
             // when & then

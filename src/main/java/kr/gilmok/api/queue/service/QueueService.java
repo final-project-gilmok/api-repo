@@ -26,6 +26,9 @@ public class QueueService {
     @Value("${queue.admitted-ttl-seconds:300}")
     private int admittedTtlSeconds;
 
+    @Value("${queue.grace-period-seconds:180}")
+    private int gracePeriodSeconds;
+
     @PostConstruct
     void validateConfig() {
         if (admissionRps <= 0) {
@@ -33,6 +36,9 @@ public class QueueService {
         }
         if (admittedTtlSeconds <= 0) {
             throw new IllegalStateException("queue.admitted-ttl-seconds must be positive, but was: " + admittedTtlSeconds);
+        }
+        if (gracePeriodSeconds <= 0) {
+            throw new IllegalStateException("queue.grace-period-seconds must be positive, but was: " + gracePeriodSeconds);
         }
     }
 
@@ -46,7 +52,8 @@ public class QueueService {
             Long rank = queueRedisRepository.getRank(eventId, existingQueueKey);
             if (rank != null) {
                 long position = rank + 1;
-                long etaSeconds = position / admissionRps;
+                long etaSeconds = calculateEta(eventId, position);
+                queueRedisRepository.updateHeartbeat(eventId, existingQueueKey);
                 return new QueueRegisterResponse(existingQueueKey, position, etaSeconds);
             }
             // Already admitted — return position 0
@@ -59,10 +66,11 @@ public class QueueService {
         String queueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
         queueRedisRepository.register(eventId, sessionKey, queueKey, score);
+        queueRedisRepository.updateHeartbeat(eventId, queueKey);
 
         Long rank = queueRedisRepository.getRank(eventId, queueKey);
         long position = rank != null ? rank + 1 : 1;
-        long etaSeconds = position / admissionRps;
+        long etaSeconds = calculateEta(eventId, position);
 
         log.info("Queue registered: eventId={}, sessionKey={}, queueKey={}, position={}",
                 eventId, sessionKey, queueKey, position);
@@ -71,21 +79,26 @@ public class QueueService {
     }
 
     public QueueStatusResponse getStatus(String eventId, String queueKey) {
+        // Update heartbeat for grace period tracking
+        queueRedisRepository.updateHeartbeat(eventId, queueKey);
+
         // Check if admitted
         if (queueRedisRepository.isAdmitted(eventId, queueKey)) {
-            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0);
+            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0);
         }
 
         // Check if still waiting
         Long rank = queueRedisRepository.getRank(eventId, queueKey);
         if (rank != null) {
             long position = rank + 1;
-            long etaSeconds = position / admissionRps;
-            return new QueueStatusResponse(QueueStatus.WAITING, position, etaSeconds, 3000);
+            long total = queueRedisRepository.getQueueSize(eventId);
+            long etaSeconds = calculateEta(eventId, position);
+            long pollAfterMs = calculatePollInterval(position);
+            return new QueueStatusResponse(QueueStatus.WAITING, position, total, etaSeconds, pollAfterMs);
         }
 
         // Neither in queue nor admitted → expired
-        return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0);
+        return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
     }
 
     public void expireAdmitted(String eventId) {
@@ -104,8 +117,37 @@ public class QueueService {
 
         long tokensAvailable = queueRedisRepository.consumeTokens(eventId, admissionRps, queueSize);
         if (tokensAvailable > 0) {
-            queueRedisRepository.admitFromHead(eventId, tokensAvailable);
-            log.info("Admitted {} users from queue: eventId={}", tokensAvailable, eventId);
+            long admittedCount = queueRedisRepository.admitFromHead(eventId, tokensAvailable);
+            if (admittedCount > 0) {
+                queueRedisRepository.recordAdmission(eventId, admittedCount);
+            }
+            log.info("Admitted {} users from queue: eventId={}", admittedCount, eventId);
+        }
+    }
+
+    public void cleanupGracePeriod(String eventId) {
+        long gracePeriodMs = gracePeriodSeconds * 1000L;
+        long removed = queueRedisRepository.cleanupGracePeriod(eventId, gracePeriodMs);
+        if (removed > 0) {
+            log.info("Grace period cleanup removed {} stale users: eventId={}", removed, eventId);
+        }
+    }
+
+    private long calculateEta(String eventId, long position) {
+        Double avgRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000);
+        if (avgRps != null && avgRps > 0) {
+            return (long) (position / avgRps);
+        }
+        return position / admissionRps;
+    }
+
+    private long calculatePollInterval(long position) {
+        if (position >= 1000) {
+            return 5000;
+        } else if (position >= 100) {
+            return 3000;
+        } else {
+            return 1000;
         }
     }
 }
