@@ -73,8 +73,11 @@ export default function AdminReservations() {
         setSeatError(data.message || '좌석 추가에 실패했습니다.')
         return
       }
-      await loadSeats()
-      await fetch(`${API_BASE}/admin/events/${eventId}/seats/init-redis`, { method: 'POST' }).then((r) => r.json())
+      const redisRes = await fetch(`${API_BASE}/admin/events/${eventId}/seats/init-redis`, { method: 'POST' })
+      const redisData = await redisRes.json()
+      if (redisData.status !== 'success') {
+        setSeatError(redisData.message || 'Redis 초기화에 실패했습니다.')
+      }
       await loadSeats()
     } catch {
       setSeatError('좌석 추가 요청 중 오류가 발생했습니다.')
