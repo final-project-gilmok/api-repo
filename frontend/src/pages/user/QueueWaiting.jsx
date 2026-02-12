@@ -12,6 +12,7 @@ export default function QueueWaiting() {
   const [eta, setEta] = useState(0)
   const [queueKey, setQueueKey] = useState(null)
   const [error, setError] = useState(null)
+    const pollIntervalRef = useRef(3000)
   const [pollInterval, setPollInterval] = useState(3000)
   const timeoutRef = useRef(null)
 
@@ -53,7 +54,7 @@ export default function QueueWaiting() {
         setPosition(d.position)
         setEta(d.etaSeconds)
         if (d.total !== undefined) setTotal(d.total)
-        if (d.pollAfterMs > 0) setPollInterval(d.pollAfterMs)
+        if (d.pollAfterMs > 0) pollIntervalRef.current = d.pollAfterMs
 
         if (d.status === 'ADMITTABLE') {
           navigate(`/events/${eventId}/seats`, { state: { queueKey } })
@@ -69,11 +70,11 @@ export default function QueueWaiting() {
       timeoutRef.current = setTimeout(() => {
         poll()
         schedule()
-      }, pollInterval)
+      }, pollIntervalRef.current)
     }
     schedule()
     return () => clearTimeout(timeoutRef.current)
-  }, [queueKey, pollInterval, poll])
+  }, [queueKey, poll])
 
   if (error) {
     return <div className="alert alert-danger">{error}</div>

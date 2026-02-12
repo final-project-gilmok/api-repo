@@ -96,6 +96,8 @@ public class QueueRedisRepository {
         String key = admissionLogKey(eventId);
         long ts = System.currentTimeMillis();
         redisTemplate.opsForZSet().add(key, ts + ":" + count, ts);
+        long cutoff = ts - TimeUnit.SECONDS.toMillis(300);
+        redisTemplate.opsForZSet().removeRangeByScore(key, 0, cutoff);
         redisTemplate.expire(key, 300, TimeUnit.SECONDS);
     }
 

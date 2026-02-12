@@ -79,8 +79,7 @@ public class QueueService {
     }
 
     public QueueStatusResponse getStatus(String eventId, String queueKey) {
-        // Update heartbeat for grace period tracking
-        queueRedisRepository.updateHeartbeat(eventId, queueKey);
+
 
         // Check if admitted
         if (queueRedisRepository.isAdmitted(eventId, queueKey)) {
@@ -90,6 +89,8 @@ public class QueueService {
         // Check if still waiting
         Long rank = queueRedisRepository.getRank(eventId, queueKey);
         if (rank != null) {
+            // Update heartbeat for grace period tracking
+            queueRedisRepository.updateHeartbeat(eventId, queueKey);
             long position = rank + 1;
             long total = queueRedisRepository.getQueueSize(eventId);
             long etaSeconds = calculateEta(eventId, position);
