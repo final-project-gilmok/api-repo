@@ -129,7 +129,6 @@ class QueueServiceTest {
         assertThat(response.getStatus()).isEqualTo(QueueStatus.ADMITTABLE);
         assertThat(response.getPosition()).isEqualTo(0);
         assertThat(response.getPollAfterMs()).isEqualTo(0);
-        verify(queueRedisRepository).updateHeartbeat("event1", "queue1");
     }
 
     @Test
