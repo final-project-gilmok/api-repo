@@ -14,6 +14,7 @@ queue:
   admission-rps: 10
   default-event-id: 1
   admitted-ttl-seconds: 300
+  grace-period-seconds: 180
 
 reservation:
   seat-lock-ttl-seconds: 300

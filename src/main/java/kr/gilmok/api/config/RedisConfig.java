@@ -40,6 +40,14 @@ public class RedisConfig {
     }
 
     @Bean
+    public DefaultRedisScript<Long> cleanupGracePeriodScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/cleanup-grace-period.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    @Bean
     public DefaultRedisScript<Long> seatLockScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/seat-lock.lua")));

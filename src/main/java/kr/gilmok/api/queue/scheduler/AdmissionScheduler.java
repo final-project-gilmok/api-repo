@@ -21,6 +21,7 @@ public class AdmissionScheduler {
     public void processAdmission() {
         try {
             queueService.expireAdmitted(defaultEventId);
+            queueService.cleanupGracePeriod(defaultEventId);
             queueService.processAdmission(defaultEventId);
         } catch (Exception e) {
             log.error("Admission processing failed for eventId={}", defaultEventId, e);

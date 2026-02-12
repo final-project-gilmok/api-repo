@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 const API_BASE = '/api'
@@ -8,10 +8,13 @@ export default function QueueWaiting() {
   const navigate = useNavigate()
   const [status, setStatus] = useState(null)
   const [position, setPosition] = useState(0)
+  const [total, setTotal] = useState(0)
   const [eta, setEta] = useState(0)
   const [queueKey, setQueueKey] = useState(null)
   const [error, setError] = useState(null)
-  const intervalRef = useRef(null)
+    const pollIntervalRef = useRef(3000)
+  const [pollInterval, setPollInterval] = useState(3000)
+  const timeoutRef = useRef(null)
 
   // 대기열 등록
   useEffect(() => {
@@ -37,38 +40,47 @@ export default function QueueWaiting() {
       .catch(() => setError('대기열 등록에 실패했습니다.'))
   }, [eventId])
 
-  // 상태 폴링
+  // 상태 폴링 (동적 간격)
+  const poll = useCallback(() => {
+    if (!queueKey) return
+    fetch(`${API_BASE}/queue/status?eventId=${eventId}&queueKey=${queueKey}`)
+        .then((res) => {
+            if (!res.ok) throw new Error('상태 조회 실패')
+            return res.json()
+            })
+      .then((data) => {
+        const d = data.data || data
+        setStatus(d.status)
+        setPosition(d.position)
+        setEta(d.etaSeconds)
+        if (d.total !== undefined) setTotal(d.total)
+        if (d.pollAfterMs > 0) pollIntervalRef.current = d.pollAfterMs
+
+        if (d.status === 'ADMITTABLE') {
+          navigate(`/events/${eventId}/seats`, { state: { queueKey } })
+        }
+      })
+  }, [queueKey, eventId, navigate])
+
   useEffect(() => {
     if (!queueKey) return
-
-    const poll = () => {
-      fetch(`${API_BASE}/queue/status?eventId=${eventId}&queueKey=${queueKey}`)
-          .then((res) => {
-              if (!res.ok) throw new Error('상태 조회 실패')
-              return res.json()
-              })
-        .then((data) => {
-          const d = data.data || data
-          setStatus(d.status)
-          setPosition(d.position)
-          setEta(d.etaSeconds)
-
-          if (d.status === 'ADMITTABLE') {
-            clearInterval(intervalRef.current)
-            navigate(`/events/${eventId}/seats`, { state: { queueKey } })
-          }
-        })
-    }
-
-    intervalRef.current = setInterval(poll, 3000)
     poll()
-
-    return () => clearInterval(intervalRef.current)
-  }, [queueKey, eventId, navigate])
+    // noinspection UnnecessaryLocalVariableJS
+    const schedule = () => {
+      timeoutRef.current = setTimeout(() => {
+        poll()
+        schedule()
+      }, pollIntervalRef.current)
+    }
+    schedule()
+    return () => clearTimeout(timeoutRef.current)
+  }, [queueKey, poll])
 
   if (error) {
     return <div className="alert alert-danger">{error}</div>
   }
+
+  const isSurge = total >= 5000 || eta >= 600
 
   return (
     <div className="text-center py-5">
@@ -79,9 +91,20 @@ export default function QueueWaiting() {
           현재 순번: {position}
         </span>
       </div>
+      {total > 0 && (
+        <p className="text-muted small mb-1">
+          전체 대기: {total.toLocaleString()}명
+        </p>
+      )}
       <p className="text-muted">
         예상 대기 시간: {eta > 0 ? `약 ${eta}초` : '곧 입장'}
       </p>
+      {isSurge && (
+        <div className="alert alert-warning mt-3">
+          현재 접속자가 많습니다. 대기 인원 {total.toLocaleString()}명, 예상 대기 시간 약 {eta}초.
+          잠시만 기다려 주세요.
+        </div>
+      )}
       <p className="text-muted small">
         페이지를 닫지 마세요. 순번이 되면 자동으로 좌석 선택 화면으로 이동합니다.
       </p>

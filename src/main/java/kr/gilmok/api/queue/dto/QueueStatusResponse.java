@@ -9,6 +9,7 @@ import lombok.Getter;
 public class QueueStatusResponse {
     private final QueueStatus status;
     private final long position;
+    private final long total;
     private final long etaSeconds;
     private final long pollAfterMs;
 }
