@@ -27,3 +27,8 @@ spring:
       hibernate:
         format_sql: false # 운영 로그 깔끔하게
         show_sql: false   # 쿼리 로그도 끄는 것 권장 (성능/보안)
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://tempo:4318/v1/traces
