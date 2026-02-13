@@ -44,36 +44,18 @@ public class QueueService {
 
     public QueueRegisterResponse register(QueueRegisterRequest request) {
         String eventId = request.getEventId();
-        String sessionKey = request.getSessionKey();
 
-        // Check if session already has a queueKey (re-entry)
-        String existingQueueKey = queueRedisRepository.findQueueKeyBySession(eventId, sessionKey);
-        if (existingQueueKey != null) {
-            Long rank = queueRedisRepository.getRank(eventId, existingQueueKey);
-            if (rank != null) {
-                long position = rank + 1;
-                long etaSeconds = calculateEta(eventId, position);
-                queueRedisRepository.updateHeartbeat(eventId, existingQueueKey);
-                return new QueueRegisterResponse(existingQueueKey, position, etaSeconds);
-            }
-            // Already admitted — return position 0
-            if (queueRedisRepository.isAdmitted(eventId, existingQueueKey)) {
-                return new QueueRegisterResponse(existingQueueKey, 0, 0);
-            }
-        }
-
-        // New registration
         String queueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
-        queueRedisRepository.register(eventId, sessionKey, queueKey, score);
+        queueRedisRepository.register(eventId, queueKey, score);
         queueRedisRepository.updateHeartbeat(eventId, queueKey);
 
         Long rank = queueRedisRepository.getRank(eventId, queueKey);
         long position = rank != null ? rank + 1 : 1;
         long etaSeconds = calculateEta(eventId, position);
 
-        log.info("Queue registered: eventId={}, sessionKey={}, queueKey={}, position={}",
-                eventId, sessionKey, queueKey, position);
+        log.info("Queue registered: eventId={}, queueKey={}, position={}",
+                eventId, queueKey, position);
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }

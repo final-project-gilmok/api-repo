@@ -8,7 +8,7 @@ export default function SeatSelection() {
   const { eventId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const queueKey = location.state?.queueKey || sessionStorage.getItem(`queueKey_${eventId}`)
+  const queueKey = location.state?.queueKey || localStorage.getItem(`queueKey_${eventId}`)
 
   const [seats, setSeats] = useState([])
   const [selectedSeat, setSelectedSeat] = useState(null)
