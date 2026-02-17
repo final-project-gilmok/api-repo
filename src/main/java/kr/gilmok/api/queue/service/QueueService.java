@@ -2,6 +2,7 @@ package kr.gilmok.api.queue.service;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.MultiGauge;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
@@ -13,7 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -24,9 +27,9 @@ public class QueueService {
     private final QueueRedisRepository queueRedisRepository;
     private final MeterRegistry meterRegistry;
 
-    // 메트릭 값을 담을 변수 (AtomicLong 사용)
-    private final AtomicLong queueSizeGauge = new AtomicLong(0);
-    private final AtomicLong admittedSizeGauge = new AtomicLong(0);
+    // [핵심 변경] 이벤트 ID를 키로 하는 맵(Map)을 사용!
+    private final Map<String, AtomicLong> waitingQueueSizes = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> admittedQueueSizes = new ConcurrentHashMap<>();
 
     @Value("${queue.admission-rps:10}")
     private int admissionRps;
@@ -37,22 +40,21 @@ public class QueueService {
     @Value("${queue.grace-period-seconds:180}")
     private int gracePeriodSeconds;
 
-    @PostConstruct
-    void init() {
-        validateConfig();
-        // [유지] 게이지 등록 로직
-        Gauge.builder("queue.waiting.size", this.queueSizeGauge, AtomicLong::doubleValue)
-                .description("Number of users waiting in queue")
-                .register(meterRegistry);
-        Gauge.builder("queue.admitted.size", this.admittedSizeGauge, AtomicLong::doubleValue)
-                .description("Number of admitted users")
-                .register(meterRegistry);
-    }
+    // [추가 1] 앱 시작 시 초기화를 위해 기본 이벤트 ID 주입
+    @Value("${queue.default-event-id:default-event}")
+    private String defaultEventId;
 
-    void validateConfig() {
+    @PostConstruct
+    public void init() {
+        // 1. 설정값 검증
         if (admissionRps <= 0) throw new IllegalStateException("queue.admission-rps must be positive");
         if (admittedTtlSeconds <= 0) throw new IllegalStateException("queue.admitted-ttl-seconds must be positive");
         if (gracePeriodSeconds <= 0) throw new IllegalStateException("queue.grace-period-seconds must be positive");
+
+        // 2. [중요] 앱 시작 시 기본 이벤트에 대한 메트릭 초기화 (0 -> 실제값 동기화)
+        // 이걸 안 하면 재시작 직후에는 '0'으로 뜨다가 누군가 접속해야 갱신됩니다.
+        updateMetrics(defaultEventId);
+        log.info("Initialized metrics for default eventId: {}", defaultEventId);
     }
 
     // 1. 대기열 등록 (사용자 진입 시점)
@@ -164,14 +166,33 @@ public class QueueService {
         }
     }
 
-    // [신규] 공통 메트릭 갱신 메서드
-    // 이 메서드 하나로 모든 곳의 메트릭 정합성을 맞춥니다.
+    // [수정된 updateMetrics]
     private void updateMetrics(String eventId) {
-        long waitingSize = queueRedisRepository.getQueueSize(eventId);
-        long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+        // 1. Redis에서 현재 값 조회
+        Long waitingSize = queueRedisRepository.getQueueSize(eventId);
+        Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
 
-        queueSizeGauge.set(waitingSize);
-        admittedSizeGauge.set(admittedSize);
+        // 2. 해당 이벤트용 게이지 가져오기 (없으면 새로 만들고 등록!)
+        AtomicLong waitingGauge = waitingQueueSizes.computeIfAbsent(eventId, id -> {
+            AtomicLong gauge = new AtomicLong(0);
+            // 동적으로 태그(tag)를 붙여서 등록!
+            Gauge.builder("queue.waiting.size", gauge, AtomicLong::doubleValue)
+                    .tag("eventId", id) // 👈 이게 핵심!
+                    .register(meterRegistry);
+            return gauge;
+        });
+
+        AtomicLong admittedGauge = admittedQueueSizes.computeIfAbsent(eventId, id -> {
+            AtomicLong gauge = new AtomicLong(0);
+            Gauge.builder("queue.admitted.size", gauge, AtomicLong::doubleValue)
+                    .tag("eventId", id)
+                    .register(meterRegistry);
+            return gauge;
+        });
+
+        // 3. 값 갱신
+        waitingGauge.set(waitingSize != null ? waitingSize : 0);
+        admittedGauge.set(admittedSize != null ? admittedSize : 0);
     }
 
     // [유지] 유틸 메서드들
