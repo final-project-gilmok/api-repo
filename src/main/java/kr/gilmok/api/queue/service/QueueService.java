@@ -1,5 +1,6 @@
 package kr.gilmok.api.queue.service;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
@@ -40,8 +41,12 @@ public class QueueService {
     void init() { // 메트릭 등록 및 초기화
         validateConfig();
 
-        meterRegistry.gauge("queue.waiting.size", this.queueSizeGauge);
-        meterRegistry.gauge("queue.admitted.size", this.admittedSizeGauge);
+        Gauge.builder("queue.waiting.size", this.queueSizeGauge, AtomicLong::doubleValue)
+                       .description("Number of users waiting in queue")
+                       .register(meterRegistry);
+        Gauge.builder("queue.admitted.size", this.admittedSizeGauge, AtomicLong::doubleValue)
+                       .description("Number of admitted users")
+                       .register(meterRegistry);
     }
 
     void validateConfig() {
@@ -129,10 +134,8 @@ public class QueueService {
 
         queueSizeGauge.set(queueSize);
 
-        long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
-        admittedSizeGauge.set(admittedSize);
-
         if (queueSize == 0) {
+            admittedSizeGauge.set(queueRedisRepository.getAdmittedCount(eventId));
             return;
         }
 
@@ -144,6 +147,9 @@ public class QueueService {
             }
             log.info("Admitted {} users from queue: eventId={}", admittedCount, eventId);
         }
+
+        queueSizeGauge.set(queueRedisRepository.getQueueSize(eventId));
+        admittedSizeGauge.set(queueRedisRepository.getAdmittedCount(eventId));
     }
 
     public void cleanupGracePeriod(String eventId) {
