@@ -1,5 +1,6 @@
 package kr.gilmok.api.queue.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -19,6 +21,11 @@ import java.util.UUID;
 public class QueueService {
 
     private final QueueRedisRepository queueRedisRepository;
+    private final MeterRegistry meterRegistry; // Micrometer 레지스트리
+
+    // 메트릭 값을 담을 변수 (AtomicLong 사용)
+    private final AtomicLong queueSizeGauge = new AtomicLong(0);
+    private final AtomicLong admittedSizeGauge = new AtomicLong(0);
 
     @Value("${queue.admission-rps:10}")
     private int admissionRps;
@@ -28,6 +35,14 @@ public class QueueService {
 
     @Value("${queue.grace-period-seconds:180}")
     private int gracePeriodSeconds;
+
+    @PostConstruct
+    void init() { // 메트릭 등록 및 초기화
+        validateConfig();
+
+        meterRegistry.gauge("queue.waiting.size", this.queueSizeGauge);
+        meterRegistry.gauge("queue.admitted.size", this.admittedSizeGauge);
+    }
 
     @PostConstruct
     void validateConfig() {
@@ -112,6 +127,12 @@ public class QueueService {
 
     public void processAdmission(String eventId) {
         long queueSize = queueRedisRepository.getQueueSize(eventId);
+
+        queueSizeGauge.set(queueSize);
+
+        long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+        admittedSizeGauge.set(admittedSize);
+
         if (queueSize == 0) {
             return;
         }
