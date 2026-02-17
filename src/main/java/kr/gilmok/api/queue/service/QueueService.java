@@ -41,7 +41,7 @@ public class QueueService {
     private int gracePeriodSeconds;
 
     // [추가 1] 앱 시작 시 초기화를 위해 기본 이벤트 ID 주입
-    @Value("${queue.default-event-id:default-event}")
+    @Value("${queue.default-event-id:default}")
     private String defaultEventId;
 
     @PostConstruct
@@ -166,33 +166,31 @@ public class QueueService {
         }
     }
 
-    // [수정된 updateMetrics]
     private void updateMetrics(String eventId) {
         // 1. Redis에서 현재 값 조회
         Long waitingSize = queueRedisRepository.getQueueSize(eventId);
         Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
 
-        // 2. 해당 이벤트용 게이지 가져오기 (없으면 새로 만들고 등록!)
-        AtomicLong waitingGauge = waitingQueueSizes.computeIfAbsent(eventId, id -> {
-            AtomicLong gauge = new AtomicLong(0);
-            // 동적으로 태그(tag)를 붙여서 등록!
-            Gauge.builder("queue.waiting.size", gauge, AtomicLong::doubleValue)
-                    .tag("eventId", id) // 👈 이게 핵심!
-                    .register(meterRegistry);
-            return gauge;
-        });
+        // 2. 게이지 가져오기 (없으면 안전하게 생성)
+        AtomicLong waitingGauge = waitingQueueSizes.computeIfAbsent(eventId,
+                id -> registerGauge("queue.waiting.size", "Number of users waiting in queue", id));
 
-        AtomicLong admittedGauge = admittedQueueSizes.computeIfAbsent(eventId, id -> {
-            AtomicLong gauge = new AtomicLong(0);
-            Gauge.builder("queue.admitted.size", gauge, AtomicLong::doubleValue)
-                    .tag("eventId", id)
-                    .register(meterRegistry);
-            return gauge;
-        });
+        AtomicLong admittedGauge = admittedQueueSizes.computeIfAbsent(eventId,
+                id -> registerGauge("queue.admitted.size", "Number of admitted users", id));
 
-        // 3. 값 갱신
+        // 3. 값 갱신 (null 체크 포함)
         waitingGauge.set(waitingSize != null ? waitingSize : 0);
         admittedGauge.set(admittedSize != null ? admittedSize : 0);
+    }
+
+    // [신규] 게이지 등록 도우미 메서드 (코드 중복 제거)
+    private AtomicLong registerGauge(String name, String description, String eventId) {
+        AtomicLong gauge = new AtomicLong(0);
+        Gauge.builder(name, gauge, AtomicLong::doubleValue)
+                .description(description)
+                .tag("eventId", eventId)
+                .register(meterRegistry);
+        return gauge;
     }
 
     // [유지] 유틸 메서드들
