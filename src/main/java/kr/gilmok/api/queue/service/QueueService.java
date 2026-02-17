@@ -44,7 +44,6 @@ public class QueueService {
         meterRegistry.gauge("queue.admitted.size", this.admittedSizeGauge);
     }
 
-    @PostConstruct
     void validateConfig() {
         if (admissionRps <= 0) {
             throw new IllegalStateException("queue.admission-rps must be positive, but was: " + admissionRps);
