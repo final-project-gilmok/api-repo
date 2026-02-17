@@ -147,9 +147,6 @@ public class QueueService {
                 updateMetrics(eventId);
             }
         } else {
-            // 토큰이 없어서 입장이 안 일어났어도,
-            // 위에서 expireAdmitted 등에 의해 큐 사이즈가 변했을 수 있으니 안전하게 갱신
-            updateMetrics(eventId);
         }
     }
 
