@@ -17,9 +17,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/queue/**").permitAll()
-                        .requestMatchers("/api/events/**").permitAll()
-                        .requestMatchers("/api/reservations/**").permitAll()
+                        .requestMatchers("/queue/**").permitAll()
+                        .requestMatchers("/events/**").permitAll()
+                        .requestMatchers("/reservations/**").permitAll()
                         .requestMatchers("/admin/**").permitAll() // TODO: 인증 구현 후 hasRole("ADMIN")으로 복원
                         .anyRequest().permitAll()
                 );
