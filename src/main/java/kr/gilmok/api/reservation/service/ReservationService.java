@@ -1,5 +1,8 @@
 package kr.gilmok.api.reservation.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
@@ -33,6 +36,7 @@ public class ReservationService {
     private final EventRepository eventRepository;
     private final SeatLockRedisRepository seatLockRedisRepository;
     private final QueueRedisRepository queueRedisRepository;
+    private final MeterRegistry meterRegistry; // [추가]
 
     @Value("${reservation.seat-lock-ttl-seconds:300}")
     private int seatLockTtlSeconds;
@@ -139,6 +143,9 @@ public class ReservationService {
         );
 
         log.info("Reservation confirmed: code={}", reservationCode);
+
+        meterRegistry.counter("reservation.success.total", "eventId", String.valueOf(reservation.getEvent().getId()))
+                .increment();
 
         return ReservationResponse.from(reservation);
     }
