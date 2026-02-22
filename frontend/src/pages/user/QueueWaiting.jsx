@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-const API_BASE = '/api'
+const API_BASE = ''
 
 export default function QueueWaiting() {
   const { eventId } = useParams()

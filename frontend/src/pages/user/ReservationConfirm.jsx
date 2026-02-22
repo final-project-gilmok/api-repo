@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
-const API_BASE = '/api'
+const API_BASE = ''
 const HOLD_SECONDS = 300
 
 export default function ReservationConfirm() {

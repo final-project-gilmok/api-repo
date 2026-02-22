@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-const API_BASE = '/api'
+const API_BASE = ''
 
 export default function AdminSeatManagement() {
   const { eventId } = useParams()
