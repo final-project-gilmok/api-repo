@@ -23,10 +23,6 @@ public class QueueRedisRepository {
         return "queue:" + eventId;
     }
 
-    private String sessionsKey(String eventId) {
-        return "queue:" + eventId + ":sessions";
-    }
-
     private String admittedKey(String eventId) {
         return "queue:" + eventId + ":admitted";
     }
@@ -35,18 +31,9 @@ public class QueueRedisRepository {
         return "queue:" + eventId + ":token-bucket";
     }
 
-    public String findQueueKeyBySession(String eventId, String sessionKey) {
-        Object value = redisTemplate.opsForHash().get(sessionsKey(eventId), sessionKey);
-        return value != null ? value.toString() : null;
-    }
-
-    public boolean register(String eventId, String sessionKey, String queueKey, double score) {
+    public boolean register(String eventId, String queueKey, double score) {
         Boolean added = redisTemplate.opsForZSet().addIfAbsent(queueKey(eventId), queueKey, score);
-        if (Boolean.TRUE.equals(added)) {
-            redisTemplate.opsForHash().put(sessionsKey(eventId), sessionKey, queueKey);
-            return true;
-        }
-        return false;
+        return Boolean.TRUE.equals(added);
     }
 
     public Long getRank(String eventId, String queueKey) {

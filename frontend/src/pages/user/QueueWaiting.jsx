@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-const API_BASE = '/api'
+const API_BASE = ''
 
 export default function QueueWaiting() {
   const { eventId } = useParams()
@@ -12,42 +12,101 @@ export default function QueueWaiting() {
   const [eta, setEta] = useState(0)
   const [queueKey, setQueueKey] = useState(null)
   const [error, setError] = useState(null)
-    const pollIntervalRef = useRef(3000)
-  const [pollInterval, setPollInterval] = useState(3000)
+  const pollIntervalRef = useRef(3000)
   const timeoutRef = useRef(null)
 
-  // 대기열 등록
-  useEffect(() => {
-    const sessionKey = sessionStorage.getItem('sessionKey') || crypto.randomUUID()
-    sessionStorage.setItem('sessionKey', sessionKey)
+  const storageKey = `queueKey_${eventId}`
+  const initFlag = `tab_initialized_${eventId}`
 
-    fetch(`${API_BASE}/queue/register`, {
+  // 새로 등록하고 localStorage에 저장
+  const registerNew = useCallback(() => {
+    const fingerprint = sessionStorage.getItem('fingerprint') || crypto.randomUUID()
+    sessionStorage.setItem('fingerprint', fingerprint)
+
+    return fetch(`${API_BASE}/queue/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, sessionKey }),
+      body: JSON.stringify({ eventId, fingerprint }),
     })
-        .then((res) => {
-            if (!res.ok) throw new Error('등록 실패')
-            return res.json()
-            })
+      .then((res) => {
+        if (!res.ok) throw new Error('등록 실패')
+        return res.json()
+      })
       .then((data) => {
         const d = data.data || data
         setQueueKey(d.queueKey)
         setPosition(d.position)
         setEta(d.etaSeconds)
-        sessionStorage.setItem(`queueKey_${eventId}`, d.queueKey)
+        localStorage.setItem(storageKey, d.queueKey)
+        sessionStorage.setItem(initFlag, 'true')
       })
       .catch(() => setError('대기열 등록에 실패했습니다.'))
-  }, [eventId])
+  }, [eventId, storageKey, initFlag])
+
+  // 대기열 등록 (새 탭 vs 새로고침 판별)
+  useEffect(() => {
+    const isRefresh = sessionStorage.getItem(initFlag) === 'true'
+
+    if (isRefresh) {
+      // 새로고침 → 항상 새로 등록
+      registerNew()
+    } else {
+      // 새 탭 → localStorage에서 기존 queueKey 확인
+      const existing = localStorage.getItem(storageKey)
+      if (existing) {
+        // 기존 queueKey가 유효한지 확인
+        fetch(`${API_BASE}/queue/status?eventId=${eventId}`, {
+          headers: { 'X-Queue-Key': existing },
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error()
+            return res.json()
+          })
+          .then((data) => {
+            const d = data.data || data
+            if (d.status === 'EXPIRED') {
+              // 만료됨 → 새로 등록
+              registerNew()
+            } else {
+              // 유효함 → 공유
+              setQueueKey(existing)
+              setPosition(d.position)
+              setEta(d.etaSeconds)
+              if (d.total !== undefined) setTotal(d.total)
+              sessionStorage.setItem(initFlag, 'true')
+            }
+          })
+          .catch(() => registerNew())
+      } else {
+        registerNew()
+      }
+    }
+  }, [eventId, storageKey, initFlag, registerNew])
+
+  // 다른 탭에서 queueKey가 변경되면 동기화
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === storageKey && e.newValue && e.newValue !== queueKey) {
+        setQueueKey(e.newValue)
+        setPosition(0)
+        setEta(0)
+        setTotal(0)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [storageKey, queueKey])
 
   // 상태 폴링 (동적 간격)
   const poll = useCallback(() => {
     if (!queueKey) return
-    fetch(`${API_BASE}/queue/status?eventId=${eventId}&queueKey=${queueKey}`)
-        .then((res) => {
-            if (!res.ok) throw new Error('상태 조회 실패')
-            return res.json()
-            })
+    fetch(`${API_BASE}/queue/status?eventId=${eventId}`, {
+      headers: { 'X-Queue-Key': queueKey },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('상태 조회 실패')
+        return res.json()
+      })
       .then((data) => {
         const d = data.data || data
         setStatus(d.status)
@@ -65,7 +124,6 @@ export default function QueueWaiting() {
   useEffect(() => {
     if (!queueKey) return
     poll()
-    // noinspection UnnecessaryLocalVariableJS
     const schedule = () => {
       timeoutRef.current = setTimeout(() => {
         poll()
@@ -105,6 +163,9 @@ export default function QueueWaiting() {
           잠시만 기다려 주세요.
         </div>
       )}
+      <div className="alert alert-danger mt-3">
+        <strong>주의:</strong> 페이지를 새로고침하면 대기 순번이 초기화됩니다. 새로고침하지 마세요!
+      </div>
       <p className="text-muted small">
         페이지를 닫지 마세요. 순번이 되면 자동으로 좌석 선택 화면으로 이동합니다.
       </p>

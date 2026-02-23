@@ -36,16 +36,16 @@ class QueueServiceTest {
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
     }
 
-    private QueueRegisterRequest createRequest(String eventId, String sessionKey) {
+    private QueueRegisterRequest createRequest(String eventId, String fingerprint) {
         try {
             QueueRegisterRequest request = new QueueRegisterRequest();
             var eventIdField = QueueRegisterRequest.class.getDeclaredField("eventId");
             eventIdField.setAccessible(true);
             eventIdField.set(request, eventId);
 
-            var sessionKeyField = QueueRegisterRequest.class.getDeclaredField("sessionKey");
-            sessionKeyField.setAccessible(true);
-            sessionKeyField.set(request, sessionKey);
+            var fingerprintField = QueueRegisterRequest.class.getDeclaredField("fingerprint");
+            fingerprintField.setAccessible(true);
+            fingerprintField.set(request, fingerprint);
 
             return request;
         } catch (Exception e) {
@@ -56,12 +56,11 @@ class QueueServiceTest {
     // === register 테스트 ===
 
     @Test
-    @DisplayName("신규 등록 - queueKey와 position을 반환한다")
-    void register_newUser_returnsQueueKeyAndPosition() {
+    @DisplayName("등록 - 항상 새로운 queueKey와 position을 반환한다")
+    void register_alwaysReturnsNewQueueKeyAndPosition() {
         // given
-        QueueRegisterRequest request = createRequest("event1", "session1");
-        given(queueRedisRepository.findQueueKeyBySession("event1", "session1")).willReturn(null);
-        given(queueRedisRepository.register(eq("event1"), eq("session1"), anyString(), anyDouble())).willReturn(true);
+        QueueRegisterRequest request = createRequest("event1", "fp1");
+        given(queueRedisRepository.register(eq("event1"), anyString(), anyDouble())).willReturn(true);
         given(queueRedisRepository.getRank(eq("event1"), anyString())).willReturn(0L);
         given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
 
@@ -71,47 +70,8 @@ class QueueServiceTest {
         // then
         assertThat(response.getQueueKey()).isNotNull();
         assertThat(response.getPosition()).isEqualTo(1);
-        verify(queueRedisRepository).register(eq("event1"), eq("session1"), anyString(), anyDouble());
+        verify(queueRedisRepository).register(eq("event1"), anyString(), anyDouble());
         verify(queueRedisRepository).updateHeartbeat(eq("event1"), anyString());
-    }
-
-    @Test
-    @DisplayName("재입장 - 동일 sessionKey로 요청 시 기존 queueKey를 반환한다")
-    void register_existingSession_returnsSameQueueKey() {
-        // given
-        String existingQueueKey = "existing-uuid";
-        QueueRegisterRequest request = createRequest("event1", "session1");
-        given(queueRedisRepository.findQueueKeyBySession("event1", "session1")).willReturn(existingQueueKey);
-        given(queueRedisRepository.getRank("event1", existingQueueKey)).willReturn(2L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
-
-        // when
-        QueueRegisterResponse response = queueService.register(request);
-
-        // then
-        assertThat(response.getQueueKey()).isEqualTo(existingQueueKey);
-        assertThat(response.getPosition()).isEqualTo(3);
-        verify(queueRedisRepository, never()).register(anyString(), anyString(), anyString(), anyDouble());
-        verify(queueRedisRepository).updateHeartbeat("event1", existingQueueKey);
-    }
-
-    @Test
-    @DisplayName("재입장 - 이미 admitted 상태면 position 0을 반환한다")
-    void register_alreadyAdmitted_returnsPositionZero() {
-        // given
-        String existingQueueKey = "admitted-uuid";
-        QueueRegisterRequest request = createRequest("event1", "session1");
-        given(queueRedisRepository.findQueueKeyBySession("event1", "session1")).willReturn(existingQueueKey);
-        given(queueRedisRepository.getRank("event1", existingQueueKey)).willReturn(null);
-        given(queueRedisRepository.isAdmitted("event1", existingQueueKey)).willReturn(true);
-
-        // when
-        QueueRegisterResponse response = queueService.register(request);
-
-        // then
-        assertThat(response.getQueueKey()).isEqualTo(existingQueueKey);
-        assertThat(response.getPosition()).isEqualTo(0);
-        assertThat(response.getEtaSeconds()).isEqualTo(0);
     }
 
     // === getStatus 테스트 ===
@@ -173,7 +133,7 @@ class QueueServiceTest {
     void getStatus_position1000Plus_returns5000ms() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(1499L); // position = 1500
+        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(1499L);
         given(queueRedisRepository.getQueueSize("event1")).willReturn(2000L);
         given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
 
@@ -189,7 +149,7 @@ class QueueServiceTest {
     void getStatus_position100to999_returns3000ms() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(499L); // position = 500
+        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(499L);
         given(queueRedisRepository.getQueueSize("event1")).willReturn(1000L);
         given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
 
@@ -205,7 +165,7 @@ class QueueServiceTest {
     void getStatus_positionUnder100_returns1000ms() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(9L); // position = 10
+        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(9L);
         given(queueRedisRepository.getQueueSize("event1")).willReturn(50L);
         given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
 
@@ -223,7 +183,7 @@ class QueueServiceTest {
     void getStatus_withMovingAvgRps_usesAvgForEta() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L); // position = 100
+        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L);
         given(queueRedisRepository.getQueueSize("event1")).willReturn(200L);
         given(queueRedisRepository.getMovingAverageRps("event1", 60_000L)).willReturn(20.0);
 
@@ -231,7 +191,6 @@ class QueueServiceTest {
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
 
         // then
-        // position=100, avgRps=20 → eta = 100/20 = 5
         assertThat(response.getEtaSeconds()).isEqualTo(5);
     }
 
@@ -240,7 +199,7 @@ class QueueServiceTest {
     void getStatus_withoutMovingAvgRps_fallsBackToAdmissionRps() {
         // given
         given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L); // position = 100
+        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L);
         given(queueRedisRepository.getQueueSize("event1")).willReturn(200L);
         given(queueRedisRepository.getMovingAverageRps("event1", 60_000L)).willReturn(null);
 
@@ -248,7 +207,6 @@ class QueueServiceTest {
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
 
         // then
-        // position=100, admissionRps=10 → eta = 100/10 = 10
         assertThat(response.getEtaSeconds()).isEqualTo(10);
     }
 

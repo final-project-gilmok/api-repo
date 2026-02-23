@@ -58,7 +58,7 @@ class QueueRedisRepositoryIntegrationTest {
         double score = System.currentTimeMillis();
 
         // when
-        boolean registered = queueRedisRepository.register(EVENT_ID, "session-1", queueKey, score);
+        boolean registered = queueRedisRepository.register(EVENT_ID, queueKey, score);
         Long rank = queueRedisRepository.getRank(EVENT_ID, queueKey);
 
         // then
@@ -71,7 +71,7 @@ class QueueRedisRepositoryIntegrationTest {
     void admitFromHead_movesToSortedSet() {
         // given
         String queueKey = "user-1";
-        queueRedisRepository.register(EVENT_ID, "session-1", queueKey, 1.0);
+        queueRedisRepository.register(EVENT_ID, queueKey, 1.0);
 
         long beforeAdmit = System.currentTimeMillis();
 
@@ -95,7 +95,7 @@ class QueueRedisRepositoryIntegrationTest {
     void isAdmitted_returnsTrueAfterAdmit() {
         // given
         String queueKey = "user-1";
-        queueRedisRepository.register(EVENT_ID, "session-1", queueKey, 1.0);
+        queueRedisRepository.register(EVENT_ID, queueKey, 1.0);
 
         // when
         queueRedisRepository.admitFromHead(EVENT_ID, 1);

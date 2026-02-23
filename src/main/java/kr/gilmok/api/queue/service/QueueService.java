@@ -59,7 +59,6 @@ public class QueueService {
     // 1. 대기열 등록 (사용자 진입 시점)
     public QueueRegisterResponse register(QueueRegisterRequest request) {
         String eventId = request.getEventId();
-        String sessionKey = request.getSessionKey();
 
         // [생략] 재진입(Re-entry) 로직은 상태 변경이 없으므로 그대로 둠...
         String existingQueueKey = queueRedisRepository.findQueueKeyBySession(eventId, sessionKey);
@@ -80,7 +79,7 @@ public class QueueService {
         // [중요] 신규 등록 발생 -> 상태 변경됨
         String queueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
-        queueRedisRepository.register(eventId, sessionKey, queueKey, score);
+        queueRedisRepository.register(eventId, queueKey, score);
         queueRedisRepository.updateHeartbeat(eventId, queueKey);
 
         // [추가] 상태가 변했으니 메트릭 갱신!

@@ -11,8 +11,6 @@ public class QueueRegisterRequest {
     @NotBlank(message = "eventId는 필수입니다.")
     private String eventId;
 
-    @NotBlank(message = "sessionKey는 필수입니다.")
-    private String sessionKey;
-
+    @NotBlank(message = "fingerprint는 필수입니다.")
     private String fingerprint;
 }
