@@ -23,14 +23,24 @@ configurations {
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
 }
 
 ext {
     set('snippetsDir', file("build/generated-snippets"))
+    set('springAiVersion', "1.1.0-M4")
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
 }
 
 dependencies {
     implementation project(':common')
+    implementation "org.springframework.ai:spring-ai-starter-model-google-genai"
+//    implementation 'org.springframework.ai:spring-ai-core'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
