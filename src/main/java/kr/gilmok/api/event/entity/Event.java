@@ -24,9 +24,6 @@ public class Event {
     @Column(nullable = false, length = 10)
     private EventStatus status;
 
-    @Column(length = 500)
-    private String demoUrl;
-
     private LocalDateTime startsAt;
     private LocalDateTime endsAt;
 
@@ -35,12 +32,11 @@ public class Event {
 
     @Builder
     public Event(String name, String description, LocalDateTime startsAt,
-                 LocalDateTime endsAt, String demoUrl) {
+                 LocalDateTime endsAt) {
         this.name = name;
         this.description = description;
         this.startsAt = startsAt;
         this.endsAt = endsAt;
-        this.demoUrl = demoUrl;
         this.status = EventStatus.DRAFT; // 생성 시 무조건 DRAFT
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
