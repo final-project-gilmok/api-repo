@@ -10,13 +10,21 @@ export default function ReservationConfirm() {
   const location = useLocation()
   const reservation = location.state?.reservation
 
-  const [remaining, setRemaining] = useState(HOLD_SECONDS)
+  const calcRemaining = () => {
+    if (!reservation?.createdAt) return HOLD_SECONDS
+    const elapsed = Math.floor((Date.now() - new Date(reservation.createdAt).getTime()) / 1000)
+    return Math.max(0, HOLD_SECONDS - elapsed)
+  }
+
+  const [remaining, setRemaining] = useState(calcRemaining)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState(null)
   const intervalRef = useRef(null)
 
   useEffect(() => {
     if (!reservation) return
+
+    setRemaining(calcRemaining())
 
     intervalRef.current = setInterval(() => {
       setRemaining((prev) => {
