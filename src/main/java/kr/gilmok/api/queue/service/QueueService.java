@@ -60,23 +60,7 @@ public class QueueService {
     public QueueRegisterResponse register(QueueRegisterRequest request) {
         String eventId = request.getEventId();
 
-        // [생략] 재진입(Re-entry) 로직은 상태 변경이 없으므로 그대로 둠...
-        String existingQueueKey = queueRedisRepository.findQueueKeyBySession(eventId, sessionKey);
-        if (existingQueueKey != null) {
-            Long rank = queueRedisRepository.getRank(eventId, existingQueueKey);
-            if (rank != null) {
-                long position = rank + 1;
-                long etaSeconds = calculateEta(eventId, position);
-                queueRedisRepository.updateHeartbeat(eventId, existingQueueKey);
-                return new QueueRegisterResponse(existingQueueKey, position, etaSeconds);
-            }
-            // Already admitted — return position 0
-            if (queueRedisRepository.isAdmitted(eventId, existingQueueKey)) {
-                return new QueueRegisterResponse(existingQueueKey, 0, 0);
-            }
-        }
-
-        // [중요] 신규 등록 발생 -> 상태 변경됨
+        // 신규 등록
         String queueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
         queueRedisRepository.register(eventId, queueKey, score);
@@ -89,7 +73,7 @@ public class QueueService {
         long position = rank != null ? rank + 1 : 1;
         long etaSeconds = calculateEta(eventId, position);
 
-        log.info("Queue registered: eventId={}, sessionKey={}, queueKey={}, position={}", eventId, sessionKey, queueKey, position);
+        log.info("Queue registered: eventId={}, queueKey={}, position={}", eventId, queueKey, position);
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
