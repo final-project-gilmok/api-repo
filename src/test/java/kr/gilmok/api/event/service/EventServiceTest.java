@@ -6,6 +6,7 @@ import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.event.exception.EventErrorCode;
+import kr.gilmok.api.policy.service.PolicyService;
 import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.exception.CustomException;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,8 @@ class EventServiceTest {
 
     @Mock
     private EventRepository eventRepository;
+    @Mock
+    private PolicyService policyService;
 
     @InjectMocks
     private EventService eventService;
@@ -61,9 +64,13 @@ class EventServiceTest {
                     "설명",
                     LocalDateTime.now(),
                     LocalDateTime.now().plusDays(7),
-                    "https://demo.example.com"
+                    null
             );
-            when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
+                Event e = invocation.getArgument(0);
+                setEventId(e, 1L);
+                return e;
+            });
 
             // when
             ApiResponse<EventResponse> response = eventService.createEvent(request);
@@ -74,6 +81,7 @@ class EventServiceTest {
             assertThat(response.getData().status()).isEqualTo(EventStatus.DRAFT);
 
             verify(eventRepository).save(any(Event.class));
+            verify(policyService).createPolicyForEvent(1L, null);
         }
     }
 
@@ -91,7 +99,6 @@ class EventServiceTest {
                     .description("설명")
                     .startsAt(LocalDateTime.now())
                     .endsAt(LocalDateTime.now().plusDays(1))
-                    .demoUrl(null)
                     .build();
             setEventId(event, eventId);
             when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
@@ -123,7 +130,6 @@ class EventServiceTest {
                     .description("설명")
                     .startsAt(LocalDateTime.now())
                     .endsAt(LocalDateTime.now().plusDays(1))
-                    .demoUrl(null)
                     .build();
             setEventId(event, eventId);
             when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
@@ -155,14 +161,12 @@ class EventServiceTest {
                     .description("설명1")
                     .startsAt(base)
                     .endsAt(base.plusDays(1))
-                    .demoUrl(null)
                     .build();
             Event event2 = Event.builder()
                     .name("두 번째")
                     .description("설명2")
                     .startsAt(base)
                     .endsAt(base.plusDays(1))
-                    .demoUrl(null)
                     .build();
             setEventId(event1, 1L);
             setEventId(event2, 2L);

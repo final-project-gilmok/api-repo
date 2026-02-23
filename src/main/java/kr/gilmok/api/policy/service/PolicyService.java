@@ -2,9 +2,11 @@ package kr.gilmok.api.policy.service;
 
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.api.event.repository.EventRepository;
+import kr.gilmok.api.policy.constants.PolicyDefaults;
 import kr.gilmok.api.policy.dto.AiRecommendationResponse;
 import kr.gilmok.api.policy.dto.MetricsResponse;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
+import kr.gilmok.api.policy.dto.PolicyCreateRequest;
 import kr.gilmok.api.policy.dto.PolicyResponse;
 import kr.gilmok.api.policy.dto.PolicyUpdateRequest;
 import kr.gilmok.api.policy.entity.Policy;
@@ -13,6 +15,7 @@ import kr.gilmok.api.policy.exception.PolicyErrorCode;
 import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.policy.repository.PolicyHistoryRepository;
 import kr.gilmok.api.policy.repository.PolicyRepository;
+import kr.gilmok.api.policy.validation.BlockRulesValidator;
 import kr.gilmok.common.exception.CustomException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
@@ -49,10 +52,41 @@ public class PolicyService {
     }
 
     @Transactional
+    public void createPolicyForEvent(Long eventId, PolicyCreateRequest request) {
+        if (request != null && request.blockRules() != null) {
+            BlockRulesValidator.validate(request.blockRules());
+        }
+        Policy policy = new Policy(eventId);
+        int rps = request != null && request.admissionRps() != null ? request.admissionRps() : PolicyDefaults.ADMISSION_RPS;
+        int concurrency = request != null && request.admissionConcurrency() != null ? request.admissionConcurrency() : PolicyDefaults.ADMISSION_CONCURRENCY;
+        long ttl = request != null && request.tokenTtlSeconds() != null ? request.tokenTtlSeconds() : PolicyDefaults.TOKEN_TTL_SECONDS;
+        var blockRules = request != null && request.blockRules() != null ? request.blockRules() : PolicyDefaults.blockRules();
+        String gateMode = request != null && request.gateMode() != null && !request.gateMode().isBlank() ? request.gateMode() : PolicyDefaults.GATE_MODE;
+        Integer maxRps = request != null ? request.maxRequestsPerSecond() : null;
+        Integer blockMin = request != null ? request.blockDurationMinutes() : null;
+        policy.updatePolicy(rps, concurrency, ttl, blockRules, gateMode, null, maxRps, blockMin);
+        policyRepository.saveAndFlush(policy);
+        try {
+            policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
+        } catch (Exception e) {
+            log.warn("Redis policy cache save failed: eventId={}", eventId, e);
+        }
+        if (rabbitTemplate != null) {
+            try {
+                rabbitTemplate.convertAndSend("policy.exchange", "policy.updated", eventId);
+            } catch (Exception e) {
+                log.warn("Policy update message publish failed: eventId={}", eventId, e);
+            }
+        }
+    }
+
+    @Transactional
     public Long updatePolicy(Long eventId, PolicyUpdateRequest request) {
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
+        BlockRulesValidator.validate(request.blockRules());
+
         Optional<Policy> existingPolicy = policyRepository.findByEventId(eventId);
         Policy policy = existingPolicy.orElse(new Policy(eventId));
 

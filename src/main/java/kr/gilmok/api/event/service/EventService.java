@@ -7,6 +7,7 @@ import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.event.exception.EventErrorCode;
+import kr.gilmok.api.policy.service.PolicyService;
 import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.List;
 public class EventService {
 
     private final EventRepository eventRepository;
+    private final PolicyService policyService;
 
     @Transactional
     public ApiResponse<EventResponse> createEvent(EventCreateRequest dto) {
@@ -29,10 +31,10 @@ public class EventService {
                 .description(dto.description())
                 .startsAt(dto.startsAt())
                 .endsAt(dto.endsAt())
-                .demoUrl(dto.demoUrl())
                 .build();
 
         Event saved = eventRepository.save(event);
+        policyService.createPolicyForEvent(saved.getId(), dto.policy());
         return ApiResponse.success(EventResponse.from(saved));
     }
 

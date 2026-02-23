@@ -1,5 +1,6 @@
 package kr.gilmok.api.policy.entity;
 
+import kr.gilmok.api.policy.constants.PolicyDefaults;
 import kr.gilmok.api.policy.vo.BlockRules;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -24,24 +25,24 @@ public class Policy {
     @Column(nullable = false, unique = true) // 이벤트당 정책은 하나이므로 unique 추가
     private Long eventId;
 
-    private int admissionRps;
-    private int admissionConcurrency;
-    private long tokenTtlSeconds;
+    private int admissionRps; // 초당 허용 수
+    private int admissionConcurrency; // 동시 접속 수
+    private long tokenTtlSeconds; // 토큰 유효 시간
 
     @Version
     @Column(nullable = false)
-    private long policyVersion;
+    private long policyVersion; // 동시성 제어 -> 낙관적 락
 
     // 매크로 방어: 유저당 초당 최대 요청 수. 0이면 제한 없음.
     @Column(name = "max_requests_per_second", nullable = false)
-    private int maxRequestsPerSecond = 100;
+    private int maxRequestsPerSecond = PolicyDefaults.MAX_REQUESTS_PER_SECOND;
 
     // 매크로 방어: 초과 시 차단 시간(분).
     @Column(name = "block_duration_minutes", nullable = false)
-    private int blockDurationMinutes = 10;
+    private int blockDurationMinutes = PolicyDefaults.BLOCK_DURATION_MINUTES;
 
     @Column(length = 20)
-    private String gateMode = "ROUTING_ENABLED";
+    private String gateMode = PolicyDefaults.GATE_MODE;
 
     private Long updatedByUserId;
 
@@ -55,7 +56,10 @@ public class Policy {
     public Policy(Long eventId) {
         this.eventId = eventId;
         this.policyVersion = 1L;
-        this.blockRules = BlockRules.empty();
+        this.admissionRps = PolicyDefaults.ADMISSION_RPS;
+        this.admissionConcurrency = PolicyDefaults.ADMISSION_CONCURRENCY;
+        this.tokenTtlSeconds = PolicyDefaults.TOKEN_TTL_SECONDS;
+        this.blockRules = PolicyDefaults.blockRules();
     }
 
     public void updatePolicy(int rps, int concurrency, long ttl, BlockRules rules,
