@@ -9,6 +9,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.scripting.support.ResourceScriptSource;
 
+import java.util.List;
+
 @Configuration
 public class RedisConfig {
 
@@ -23,27 +25,12 @@ public class RedisConfig {
         return template;
     }
 
+    @SuppressWarnings("unchecked")
     @Bean
-    public DefaultRedisScript<Long> tokenBucketScript() {
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/token-bucket.lua")));
-        script.setResultType(Long.class);
-        return script;
-    }
-
-    @Bean
-    public DefaultRedisScript<Long> admitFromHeadScript() {
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/admit-from-head.lua")));
-        script.setResultType(Long.class);
-        return script;
-    }
-
-    @Bean
-    public DefaultRedisScript<Long> cleanupGracePeriodScript() {
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/cleanup-grace-period.lua")));
-        script.setResultType(Long.class);
+    public DefaultRedisScript<List> fastAdmissionCycleScript() {
+        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/fast-admission-cycle.lua")));
+        script.setResultType(List.class);
         return script;
     }
 
@@ -59,6 +46,41 @@ public class RedisConfig {
     public DefaultRedisScript<Long> seatUnlockRestoreScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/seat-unlock-restore.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Bean
+    public DefaultRedisScript<List> queueStatusScript() {
+        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/queue-status.lua")));
+        script.setResultType(List.class);
+        return script;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Bean
+    public DefaultRedisScript<List> registerIdempotentScript() {
+        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/register-idempotent.lua")));
+        script.setResultType(List.class);
+        return script;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Bean
+    public DefaultRedisScript<List> admissionRateScript() {
+        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/admission-rate.lua")));
+        script.setResultType(List.class);
+        return script;
+    }
+
+    @Bean
+    public DefaultRedisScript<Long> unlockScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/unlock.lua")));
         script.setResultType(Long.class);
         return script;
     }

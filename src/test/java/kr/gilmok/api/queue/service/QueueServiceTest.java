@@ -5,20 +5,25 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
+import kr.gilmok.common.exception.CustomException;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class QueueServiceTest {
@@ -26,22 +31,28 @@ class QueueServiceTest {
     @Mock
     private QueueRedisRepository queueRedisRepository;
 
-    @InjectMocks
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private QueueService queueService;
 
     @BeforeEach
     void setUp() {
+        queueService = new QueueService(queueRedisRepository, meterRegistry);
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
     }
 
-    private QueueRegisterRequest createRequest(String eventId, String fingerprint) {
+    private QueueRegisterRequest createRequest(String eventId, String userId, String fingerprint) {
         try {
             QueueRegisterRequest request = new QueueRegisterRequest();
             var eventIdField = QueueRegisterRequest.class.getDeclaredField("eventId");
             eventIdField.setAccessible(true);
             eventIdField.set(request, eventId);
+
+            var userIdField = QueueRegisterRequest.class.getDeclaredField("userId");
+            userIdField.setAccessible(true);
+            userIdField.set(request, userId);
 
             var fingerprintField = QueueRegisterRequest.class.getDeclaredField("fingerprint");
             fingerprintField.setAccessible(true);
@@ -56,22 +67,55 @@ class QueueServiceTest {
     // === register 테스트 ===
 
     @Test
-    @DisplayName("등록 - 항상 새로운 queueKey와 position을 반환한다")
-    void register_alwaysReturnsNewQueueKeyAndPosition() {
+    @DisplayName("등록 - 신규 등록 시 새 queueKey와 position을 반환한다")
+    void register_newUser_returnsQueueKeyAndPosition() {
         // given
-        QueueRegisterRequest request = createRequest("event1", "fp1");
-        given(queueRedisRepository.register(eq("event1"), anyString(), anyDouble())).willReturn(true);
-        given(queueRedisRepository.getRank(eq("event1"), anyString())).willReturn(0L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
+        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        given(queueRedisRepository.registerIdempotent(
+                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+        )).willReturn(Arrays.asList(1L, "new-queue-key", 0L));
 
         // when
         QueueRegisterResponse response = queueService.register(request);
 
         // then
-        assertThat(response.getQueueKey()).isNotNull();
+        assertThat(response.getQueueKey()).isEqualTo("new-queue-key");
         assertThat(response.getPosition()).isEqualTo(1);
-        verify(queueRedisRepository).register(eq("event1"), anyString(), anyDouble());
-        verify(queueRedisRepository).updateHeartbeat(eq("event1"), anyString());
+        verify(queueRedisRepository).registerIdempotent(
+                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("등록 - 중복 등록 시 기존 queueKey를 반환한다 (멱등)")
+    void register_duplicateUser_returnsExistingQueueKey() {
+        // given
+        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        given(queueRedisRepository.registerIdempotent(
+                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+        )).willReturn(Arrays.asList(0L, "existing-queue-key", 5L));
+
+        // when
+        QueueRegisterResponse response = queueService.register(request);
+
+        // then
+        assertThat(response.getQueueKey()).isEqualTo("existing-queue-key");
+        assertThat(response.getPosition()).isEqualTo(6);
+        // isNew=0이므로 메트릭 갱신 안 함
+        verify(queueRedisRepository, never()).getQueueSize(anyString());
+    }
+
+    @Test
+    @DisplayName("등록 - 이미 admitted 상태면 예외를 던진다")
+    void register_alreadyAdmitted_throwsException() {
+        // given
+        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        given(queueRedisRepository.registerIdempotent(
+                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+        )).willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
+
+        // when & then
+        assertThatThrownBy(() -> queueService.register(request))
+                .isInstanceOf(CustomException.class);
     }
 
     // === getStatus 테스트 ===
@@ -79,8 +123,9 @@ class QueueServiceTest {
     @Test
     @DisplayName("상태 조회 - admitted 상태면 ADMITTABLE을 반환한다")
     void getStatus_admitted_returnsAdmittable() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(true);
+        // given — statusCode=1
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(1L, -1L, 0L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -94,11 +139,9 @@ class QueueServiceTest {
     @Test
     @DisplayName("상태 조회 - 대기 중이면 WAITING과 position, total을 반환한다")
     void getStatus_waiting_returnsWaitingWithPosition() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(4L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(100L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
+        // given — statusCode=2, rank=4, total=100, admitCount=20
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 4L, 100L, 20L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -107,15 +150,14 @@ class QueueServiceTest {
         assertThat(response.getStatus()).isEqualTo(QueueStatus.WAITING);
         assertThat(response.getPosition()).isEqualTo(5);
         assertThat(response.getTotal()).isEqualTo(100);
-        verify(queueRedisRepository).updateHeartbeat("event1", "queue1");
     }
 
     @Test
-    @DisplayName("상태 조회 - 대기열에도 admitted에도 없으면 EXPIRED를 반환한다")
+    @DisplayName("상태 조회 - 만료 상태면 EXPIRED를 반환한다")
     void getStatus_notFound_returnsExpired() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(null);
+        // given — statusCode=3
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(3L, -1L, 0L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -131,11 +173,9 @@ class QueueServiceTest {
     @Test
     @DisplayName("동적 폴링 - position 1000 이상이면 5000ms를 반환한다")
     void getStatus_position1000Plus_returns5000ms() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(1499L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(2000L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
+        // given — rank=1499 → position=1500
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 1499L, 2000L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -147,11 +187,9 @@ class QueueServiceTest {
     @Test
     @DisplayName("동적 폴링 - position 100~999이면 3000ms를 반환한다")
     void getStatus_position100to999_returns3000ms() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(499L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(1000L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
+        // given — rank=499 → position=500
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 499L, 1000L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -163,11 +201,9 @@ class QueueServiceTest {
     @Test
     @DisplayName("동적 폴링 - position 100 미만이면 1000ms를 반환한다")
     void getStatus_positionUnder100_returns1000ms() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(9L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(50L);
-        given(queueRedisRepository.getMovingAverageRps(eq("event1"), anyLong())).willReturn(null);
+        // given — rank=9 → position=10
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 9L, 50L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
@@ -176,126 +212,86 @@ class QueueServiceTest {
         assertThat(response.getPollAfterMs()).isEqualTo(1000);
     }
 
-    // === 이동평균 ETA 테스트 ===
+    // === ETA 테스트 ===
 
     @Test
-    @DisplayName("이동평균 ETA - avgRps가 있으면 해당 값으로 ETA를 계산한다")
-    void getStatus_withMovingAvgRps_usesAvgForEta() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(200L);
-        given(queueRedisRepository.getMovingAverageRps("event1", 60_000L)).willReturn(20.0);
+    @DisplayName("ETA - admitCount가 있으면 실측 rps로 계산한다")
+    void getStatus_withAdmitCount_usesRealRpsForEta() {
+        // given — rank=99 → position=100, admitCount=60 in 60s → rps=1
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 99L, 200L, 60L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
 
-        // then
-        assertThat(response.getEtaSeconds()).isEqualTo(5);
+        // then — 100 / (60/60) = 100초
+        assertThat(response.getEtaSeconds()).isEqualTo(100);
     }
 
     @Test
-    @DisplayName("이동평균 ETA - avgRps가 null이면 admissionRps로 폴백한다")
-    void getStatus_withoutMovingAvgRps_fallsBackToAdmissionRps() {
-        // given
-        given(queueRedisRepository.isAdmitted("event1", "queue1")).willReturn(false);
-        given(queueRedisRepository.getRank("event1", "queue1")).willReturn(99L);
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(200L);
-        given(queueRedisRepository.getMovingAverageRps("event1", 60_000L)).willReturn(null);
+    @DisplayName("ETA - admitCount가 0이면 admissionRps로 폴백한다")
+    void getStatus_withoutAdmitCount_fallsBackToAdmissionRps() {
+        // given — rank=99 → position=100, admitCount=0
+        given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
+                .willReturn(Arrays.asList(2L, 99L, 200L, 0L));
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1");
 
-        // then
+        // then — 100 / 10 = 10초
         assertThat(response.getEtaSeconds()).isEqualTo(10);
     }
 
-    // === processAdmission 테스트 ===
+    // === runAdmissionCycle 테스트 ===
 
     @Test
-    @DisplayName("입장 처리 - 대기열이 비어있으면 아무 작업도 하지 않는다")
-    void processAdmission_emptyQueue_doesNothing() {
-        // given
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(0L);
+    @DisplayName("입장 사이클 - 입장 성공 시 recordAdmissionRate와 updateSessions가 호출된다")
+    void runAdmissionCycle_admitsUsers_recordsAndUpdatesSessions() {
+        // given — 결과: expired=2, cleaned=1, admitted=3, consumed=3, left=7, waiting=5, admittedSize=3, members
+        given(queueRedisRepository.runAdmissionCycle(
+                eq("event1"), anyLong(), anyLong(),
+                eq(300_000L), eq(180_000L), eq(100), eq(100)
+        )).willReturn(Arrays.asList(2L, 1L, 3L, 3L, 7L, 5L, 3L, "m1", "m2", "m3"));
 
         // when
-        queueService.processAdmission("event1");
+        queueService.runAdmissionCycle("event1");
 
         // then
-        verify(queueRedisRepository, never()).consumeTokens(anyString(), anyLong(), anyLong());
-        verify(queueRedisRepository, never()).admitFromHead(anyString(), anyLong());
+        verify(queueRedisRepository).recordAdmissionRate("event1", 3);
+        verify(queueRedisRepository).updateSessionsToAdmitted(eq("event1"), eq(List.of("m1", "m2", "m3")), anyInt());
     }
 
     @Test
-    @DisplayName("입장 처리 - 토큰이 있으면 대기열에서 꺼내 admitted로 이동하고 admission을 기록한다")
-    void processAdmission_tokensAvailable_admitsUsersAndRecords() {
-        // given
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(5L);
-        given(queueRedisRepository.consumeTokens(eq("event1"), anyLong(), eq(5L))).willReturn(3L);
-        given(queueRedisRepository.admitFromHead("event1", 3)).willReturn(3L);
+    @DisplayName("입장 사이클 - 변화 없을 때 recordAdmissionRate가 호출되지 않는다")
+    void runAdmissionCycle_noChanges_doesNotRecord() {
+        // given — 모두 0
+        given(queueRedisRepository.runAdmissionCycle(
+                eq("event1"), anyLong(), anyLong(),
+                eq(300_000L), eq(180_000L), eq(100), eq(100)
+        )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 5L, 0L));
 
         // when
-        queueService.processAdmission("event1");
+        queueService.runAdmissionCycle("event1");
 
         // then
-        verify(queueRedisRepository).admitFromHead("event1", 3);
-        verify(queueRedisRepository).recordAdmission("event1", 3);
+        verify(queueRedisRepository, never()).recordAdmissionRate(anyString(), anyLong());
+        verify(queueRedisRepository, never()).updateSessionsToAdmitted(anyString(), anyList(), anyInt());
     }
 
     @Test
-    @DisplayName("입장 처리 - 토큰이 0이면 입장시키지 않는다")
-    void processAdmission_noTokens_doesNotAdmit() {
+    @DisplayName("입장 사이클 - 반환값으로 메트릭이 갱신된다 (Redis 추가 호출 없음)")
+    void runAdmissionCycle_updatesMetricsFromReturnValues() {
         // given
-        given(queueRedisRepository.getQueueSize("event1")).willReturn(5L);
-        given(queueRedisRepository.consumeTokens(eq("event1"), anyLong(), eq(5L))).willReturn(0L);
+        given(queueRedisRepository.runAdmissionCycle(
+                eq("event1"), anyLong(), anyLong(),
+                eq(300_000L), eq(180_000L), eq(100), eq(100)
+        )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 42L, 7L));
 
         // when
-        queueService.processAdmission("event1");
+        queueService.runAdmissionCycle("event1");
 
-        // then
-        verify(queueRedisRepository, never()).admitFromHead(anyString(), anyLong());
-    }
-
-    // === expireAdmitted 테스트 ===
-
-    @Test
-    @DisplayName("만료 처리 - TTL이 지난 admitted 항목을 삭제한다")
-    void expireAdmitted_removesExpiredEntries() {
-        // given
-        given(queueRedisRepository.removeExpiredAdmitted(eq("event1"), anyLong())).willReturn(3L);
-
-        // when
-        queueService.expireAdmitted("event1");
-
-        // then
-        verify(queueRedisRepository).removeExpiredAdmitted(eq("event1"), anyLong());
-    }
-
-    @Test
-    @DisplayName("만료 처리 - 삭제할 항목이 없으면 로그만 남긴다")
-    void expireAdmitted_noExpiredEntries_logsOnly() {
-        // given
-        given(queueRedisRepository.removeExpiredAdmitted(eq("event1"), anyLong())).willReturn(0L);
-
-        // when
-        queueService.expireAdmitted("event1");
-
-        // then
-        verify(queueRedisRepository).removeExpiredAdmitted(eq("event1"), anyLong());
-    }
-
-    // === Grace Period 테스트 ===
-
-    @Test
-    @DisplayName("Grace Period - cleanupGracePeriod이 호출된다")
-    void cleanupGracePeriod_callsRepository() {
-        // given
-        given(queueRedisRepository.cleanupGracePeriod(eq("event1"), eq(180_000L))).willReturn(2L);
-
-        // when
-        queueService.cleanupGracePeriod("event1");
-
-        // then
-        verify(queueRedisRepository).cleanupGracePeriod("event1", 180_000L);
+        // then — getQueueSize/getAdmittedCount 호출 없어야 함 (반환값 사용)
+        verify(queueRedisRepository, never()).getQueueSize("event1");
+        verify(queueRedisRepository, never()).getAdmittedCount("event1");
     }
 }
