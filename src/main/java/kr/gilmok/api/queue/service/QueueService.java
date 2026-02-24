@@ -194,15 +194,15 @@ public class QueueService {
 
     // [신규 추가] 특정 이벤트의 현재 대기열 상태(사이즈) 정보 조회
     public Map<String, Long> getQueueMetricsForAi(String eventId) {
-        long waitingSize = queueRedisRepository.getQueueSize(eventId);
-        long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+        Long waitingSize = queueRedisRepository.getQueueSize(eventId);
+        Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
 
         // 이동평균 RPS도 AI가 분석하기 좋은 지표이므로 함께 넘겨주는 것을 추천합니다.
         Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000); // 최근 1분
 
         Map<String, Long> metrics = new HashMap<>();
-        metrics.put("waitingQueueSize", waitingSize);
-        metrics.put("admittedQueueSize", admittedSize);
+        metrics.put("waitingQueueSize", waitingSize != null ? waitingSize : 0L);
+        metrics.put("admittedQueueSize", admittedSize != null ? admittedSize : 0L);
         metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
 
         return metrics;

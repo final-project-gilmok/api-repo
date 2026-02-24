@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -16,7 +19,18 @@ public class PrometheusMetricsService {
     public PrometheusMetricsService(@Value("${metrics.prometheus.url}") String prometheusUrl,
                                     RestClient.Builder restClientBuilder,
                                     ObjectMapper objectMapper) {
-        this.restClient = restClientBuilder.baseUrl(prometheusUrl).build();
+
+        // 1. HTTP 타임아웃 팩토리 생성 (연결 3초, 읽기 5초)
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(5));
+
+        // 2. RestClient 빌더에 팩토리 주입
+        this.restClient = restClientBuilder
+                .baseUrl(prometheusUrl)
+                .requestFactory(factory) // 💡 타임아웃 적용
+                .build();
+
         this.objectMapper = objectMapper;
     }
 
