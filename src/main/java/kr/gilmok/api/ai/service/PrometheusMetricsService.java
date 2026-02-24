@@ -49,7 +49,7 @@ public class PrometheusMetricsService {
             JsonNode root = objectMapper.readTree(response);
             JsonNode resultNode = root.path("data").path("result");
 
-            if (resultNode.isArray() && resultNode.size() > 0) {
+            if (resultNode.isArray() && !resultNode.isEmpty()) {
                 // 💡 [수정] get() 대신 모두 path()를 사용하여 NPE 원천 차단
                 // 값이 없으면 MissingNode가 반환되고, asText()는 빈 문자열("")을 반환함
                 String valueStr = resultNode.path(0).path("value").path(1).asText();
