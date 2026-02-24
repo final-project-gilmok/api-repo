@@ -50,10 +50,15 @@ public class PrometheusMetricsService {
             JsonNode resultNode = root.path("data").path("result");
 
             if (resultNode.isArray() && resultNode.size() > 0) {
-                // 프로메테우스 value 배열의 두 번째 요소가 실제 문자열 수치입니다. (예: "0.045")
-                String valueStr = resultNode.get(0).path("value").get(1).asText();
-                double errorRate = Double.parseDouble(valueStr) * 100; // %로 변환
-                return String.format("%.2f%%", errorRate); // "4.50%" 형태로 반환
+                // 💡 [수정] get() 대신 모두 path()를 사용하여 NPE 원천 차단
+                // 값이 없으면 MissingNode가 반환되고, asText()는 빈 문자열("")을 반환함
+                String valueStr = resultNode.path(0).path("value").path(1).asText();
+
+                // 빈 문자열이 아닐 때만 파싱하여 NumberFormatException 방지
+                if (!valueStr.isBlank()) {
+                    double errorRate = Double.parseDouble(valueStr) * 100;
+                    return String.format("%.2f%%", errorRate);
+                }
             }
             return "0.00%"; // 에러가 없거나 데이터가 없을 때
 
