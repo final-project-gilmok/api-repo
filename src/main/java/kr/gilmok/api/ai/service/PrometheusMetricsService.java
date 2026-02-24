@@ -57,7 +57,9 @@ public class PrometheusMetricsService {
                 // 빈 문자열이 아닐 때만 파싱하여 NumberFormatException 방지
                 if (!valueStr.isBlank()) {
                     double errorRate = Double.parseDouble(valueStr) * 100;
-                    return String.format("%.2f%%", errorRate);
+                    if (Double.isFinite(errorRate)) {
+                        return String.format("%.2f%%", errorRate);
+                    }
                 }
             }
             return "0.00%"; // 에러가 없거나 데이터가 없을 때
