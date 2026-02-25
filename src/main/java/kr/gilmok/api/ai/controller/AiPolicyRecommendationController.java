@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/ai") // 혹은 설계하신 base path
+@RequestMapping("/admin") // 혹은 설계하신 base path
 @RequiredArgsConstructor
 public class AiPolicyRecommendationController {
 
