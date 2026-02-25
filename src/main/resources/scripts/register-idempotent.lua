@@ -28,15 +28,18 @@ local nowMs           = tonumber(ARGV[4]) or 0
 local sessionTtlSec   = tonumber(ARGV[5]) or 600
 local eventIdVal      = ARGV[6]
 
--- Helper: upsert session — create if missing, update state + lastSeenAt, extend TTL
+-- Helper: upsert session — ensure eventId/createdAt exist, update state + lastSeenAt, extend TTL
 local function upsertSession(qk, state)
   local sessKey = sessionKeyPrefix .. qk
-  local existingCreatedAt = redis.call('HGET', sessKey, 'createdAt')
-  if existingCreatedAt then
-    redis.call('HSET', sessKey, 'state', state, 'lastSeenAt', nowMs)
-  else
-    redis.call('HSET', sessKey, 'eventId', eventIdVal, 'state', state, 'createdAt', nowMs, 'lastSeenAt', nowMs)
-  end
+
+  -- preserve immutable-ish fields
+  redis.call('HSETNX', sessKey, 'eventId', eventIdVal)
+  redis.call('HSETNX', sessKey, 'createdAt', nowMs)
+
+  -- update mutable fields
+  redis.call('HSET', sessKey, 'state', state, 'lastSeenAt', nowMs)
+
+  -- TTL (seconds)
   redis.call('EXPIRE', sessKey, sessionTtlSec)
 end
 
@@ -52,13 +55,15 @@ if existing then
 
   -- b) Still in waiting queue → session upsert (WAITING) + return idempotent
   local existingRank = redis.call('ZRANK', queueKey, existing)
-  if existingRank ~= false then
+  if existingRank ~= false and existingRank ~= nil then
     upsertSession(existing, 'WAITING')
     return {0, existing, existingRank}
   end
 
-  -- c) Both gone (expired) → clean up and re-register below
+  -- c) Both gone (expired) → clean up index and re-register below
   redis.call('HDEL', userIndexKey, userId)
+  -- optional: also delete stale session if you want aggressive cleanup
+  -- redis.call('DEL', sessionKeyPrefix .. existing)
 end
 
 -- 2) New registration
@@ -66,13 +71,11 @@ redis.call('ZADD', queueKey, 'NX', score, newQueueKeyVal)
 redis.call('HSET', userIndexKey, userId, newQueueKeyVal)
 redis.call('ZADD', heartbeatsKey, nowMs, newQueueKeyVal)
 
--- Create session HASH
-local sessKey = sessionKeyPrefix .. newQueueKeyVal
-redis.call('HSET', sessKey, 'eventId', eventIdVal, 'state', 'WAITING', 'createdAt', nowMs, 'lastSeenAt', nowMs)
-redis.call('EXPIRE', sessKey, sessionTtlSec)
+-- Ensure session
+upsertSession(newQueueKeyVal, 'WAITING')
 
 -- Get rank of newly registered member
 local newRank = redis.call('ZRANK', queueKey, newQueueKeyVal)
-if newRank == false then newRank = 0 end
+if newRank == false or newRank == nil then newRank = 0 end
 
 return {1, newQueueKeyVal, newRank}
