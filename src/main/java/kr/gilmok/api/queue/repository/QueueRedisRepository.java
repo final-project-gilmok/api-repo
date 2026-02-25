@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -185,6 +186,27 @@ public class QueueRedisRepository {
             throw new IllegalStateException("Redis script returned null: fastAdmissionCycleScript");
         }
         return result;
+    }
+
+    // === Moving Average RPS (read-only, no script needed) ===
+
+    public Double getMovingAverageRps(String eventId, long windowMs) {
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(admitRateKey(eventId));
+        if (entries.isEmpty()) {
+            return 0.0;
+        }
+        long windowSeconds = windowMs / 1000;
+        long nowEpoch = System.currentTimeMillis() / 1000;
+        long cutoff = nowEpoch - windowSeconds;
+
+        long totalCount = 0;
+        for (Map.Entry<Object, Object> entry : entries.entrySet()) {
+            long sec = Long.parseLong(entry.getKey().toString());
+            if (sec > cutoff) {
+                totalCount += Long.parseLong(entry.getValue().toString());
+            }
+        }
+        return windowSeconds > 0 ? (double) totalCount / windowSeconds : 0.0;
     }
 
     // === Heartbeat (ZADD only, no EXPIRE) ===

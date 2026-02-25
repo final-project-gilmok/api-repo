@@ -15,16 +15,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-<<<<<<< feat/52-queue-enhancement
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
-=======
-import java.util.HashMap;
->>>>>>> develop
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -212,7 +209,6 @@ public class QueueService {
         }
     }
 
-<<<<<<< feat/52-queue-enhancement
     private long toLong(Object obj) {
         if (obj instanceof Long) return (Long) obj;
         if (obj instanceof Number) return ((Number) obj).longValue();
@@ -228,13 +224,13 @@ public class QueueService {
         } catch (NoSuchAlgorithmException e) {
             return "********";
         }
-=======
+    }
+
     // [신규 추가] 특정 이벤트의 현재 대기열 상태(사이즈) 정보 조회
     public Map<String, Long> getQueueMetricsForAi(String eventId) {
         Long waitingSize = queueRedisRepository.getQueueSize(eventId);
         Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
 
-        // 이동평균 RPS도 AI가 분석하기 좋은 지표이므로 함께 넘겨주는 것을 추천합니다.
         Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000); // 최근 1분
 
         Map<String, Long> metrics = new HashMap<>();
@@ -243,6 +239,5 @@ public class QueueService {
         metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
 
         return metrics;
->>>>>>> develop
     }
 }
