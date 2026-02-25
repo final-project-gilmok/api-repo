@@ -21,20 +21,10 @@ export default function AIRecommendation() {
   const handleRequestAi = async () => {
     setLoading(true);
     try {
-      // ⭐️ URL에서 불필요한 콜론(:) 제거
-      const cleanEventId = eventId.replace(':', '');
-
-      const response = await fetch(`http://localhost:8081/admin/events/${cleanEventId}/recommendation`);
-
-      // 만약 백엔드가 에러(400, 500 등)를 뱉으면 여기서 catch로 던집니다.
-      if (!response.ok) {
-        throw new Error(`서버 응답 오류: ${response.status}`);
-      }
-
-      const json = await response.json();
-      const actualData = json.data ? json.data : json;
-
-      setAiData(actualData);
+      // replace(':', '') 같은 꼼수 제거하고 정석대로 호출 (App.jsx 라우터가 정상이라면 eventId에는 숫자만 들어옴)
+      // 백엔드가 POST로 변경되었으므로 api.post 사용
+      const data = await api.post(`/api/admin/events/${eventId}/recommendation`, {});
+      setAiData(data);
     } catch (error) {
       console.error('AI 분석 실패:', error);
       alert('AI 분석 중 오류가 발생했습니다.');
@@ -43,7 +33,7 @@ export default function AIRecommendation() {
     }
   };
 
-  // 2. 추천 정책 즉시 적용 함수
+  // 2. 추천 정책 즉시 적용 함수 (✅ 리뷰 반영: 빈 배열([]) 대신 null 전달)
   const handleApply = async () => {
     if (!aiData) return;
     if (!window.confirm('AI가 추천한 이 정책을 실제 서버에 즉시 적용하시겠습니까?')) return;
@@ -53,13 +43,13 @@ export default function AIRecommendation() {
       const updateRequest = {
         admissionRps: aiData.recommendedAdmissionRps,
         tokenTtlSeconds: aiData.recommendedTokenTtlSeconds,
-        blockRules: aiData.suggestedBlockRules || []
+        // BlockRules 객체를 기대하는 백엔드를 위해 [] 대신 null 전달
+        blockRules: aiData.suggestedBlockRules || null
       };
 
-      // AdminPolicyController 의 updatePolicy 엔드포인트 호출
       await api.put(`/api/admin/events/${eventId}/policy`, updateRequest);
       alert('🚀 추천 정책이 성공적으로 적용되었습니다!');
-      navigate(`${base(eventId)}/policy`); // 적용 후 정책 설정 페이지로 이동
+      navigate(`${base(eventId)}/policy`);
     } catch (error) {
       console.error('정책 적용 실패:', error);
       alert('정책 적용에 실패했습니다.');
@@ -144,8 +134,8 @@ export default function AIRecommendation() {
                     <div className="mb-3 mt-4">
                       <p className="text-muted small mb-2">권장 차단 룰 (Block Rules)</p>
                       <div className="d-flex flex-wrap gap-2">
-                        {aiData.suggestedBlockRules && aiData.suggestedBlockRules.length > 0 ? (
-                            aiData.suggestedBlockRules.map((rule, idx) => (
+                        {aiData.suggestedBlockRules?.ipRanges && aiData.suggestedBlockRules.ipRanges.length > 0 ? (
+                            aiData.suggestedBlockRules.ipRanges.map((rule, idx) => (
                                 <span key={idx} className="badge bg-danger px-3 py-2">{rule}</span>
                             ))
                         ) : (

@@ -11,7 +11,8 @@ const Monitoring = () => {
         const getLogs = async () => {
             try {
                 const data = await fetchRecentLogs();
-                setLogs(data);
+                // ✅ 리뷰 반영: 최후의 방어선으로 한 번 더 빈 배열 보장
+                setLogs(data || []);
             } catch (error) {
                 console.error('로그 조회 실패:', error);
             }

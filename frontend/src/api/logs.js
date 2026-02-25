@@ -1,8 +1,7 @@
 import { api } from './client';
 
 export const fetchRecentLogs = async () => {
-    // ⭐️ 아까 브라우저에서 {"status":"success"} 확인했던 바로 그 포트번호를 적으세요! (8080 또는 8081)
-    const response = await fetch('http://localhost:8081/api/admin/logs');
-    const json = await response.json();
-    return json.data; // 성공적으로 받은 data 배열만 리턴!
+    const response = await api.get('/api/admin/logs');
+    // ✅ 리뷰 반영: data가 없을 경우 undefined 대신 빈 배열([])을 반환하여 map() 에러 방지
+    return response.data || [];
 };
