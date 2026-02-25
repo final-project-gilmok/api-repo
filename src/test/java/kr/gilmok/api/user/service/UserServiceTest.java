@@ -81,20 +81,20 @@ class UserServiceTest {
 
             assertThat(result).isNotNull();
             assertThat(result.reservationCount()).isEqualTo(2L);
-            assertThat(result.waitingEventIds()).isEmpty();
+            assertThat(result.waitingEventIds()).isNull();
             verify(reservationRepository).countByUserId(userId);
         }
 
         @Test
-        @DisplayName("예약이 없으면 0건과 빈 목록을 반환한다")
-        void getDashboard_noReservations_returnsZeroAndEmpty() {
+        @DisplayName("예약이 없으면 0건과 null 대기 목록을 반환한다")
+        void getDashboard_noReservations_returnsZeroAndNull() {
             Long userId = 99L;
             when(reservationRepository.countByUserId(userId)).thenReturn(0L);
 
             UserDashboardResponse result = userService.getDashboard(userId);
 
             assertThat(result.reservationCount()).isEqualTo(0);
-            assertThat(result.waitingEventIds()).isEmpty();
+            assertThat(result.waitingEventIds()).isNull();
         }
     }
 
