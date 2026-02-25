@@ -28,7 +28,8 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserDashboardResponse getDashboard(Long userId) {
         long count = reservationRepository.countByUserId(userId);
-        List<Long> waitingEventIds = List.of(); // TODO: queue 연동 시 대기 중인 eventId 목록
+        // queue 연동 전까지는 null. 연동 후 대기 중인 eventId 목록을 조회해 채운다.
+        List<Long> waitingEventIds = null;
         return new UserDashboardResponse(count, waitingEventIds);
     }
 
