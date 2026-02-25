@@ -5,31 +5,29 @@ import kr.gilmok.api.ai.service.AiPolicyRecommendationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/ai")
+@RequestMapping("/admin") // 혹은 설계하신 base path
 @RequiredArgsConstructor
 public class AiPolicyRecommendationController {
 
     private final AiPolicyRecommendationService aiService;
 
-    @GetMapping("/test")
-    public ResponseEntity<AiPolicyRecommendationDto> testAiRecommendation() {
-        // DB나 Prometheus를 연결하기 전, 이슈 1번 테스트를 위한 가짜(Dummy) 메트릭 상황 가정
-        String dummyMetrics = """
-                {
-                  "queue_waiting_size": 15000,
-                  "admission_rps": 200,
-                  "cpu_usage_percent": 92,
-                  "error_rate_5xx_percent": 4.5,
-                  "recent_abnormal_user_agent": "Python-requests/2.25.1"
-                }
-                """;
+    // 더미 테스트 엔드포인트를 실제 라이브 데이터 기반 엔드포인트로 변경
+    @GetMapping("/events/{eventId}/recommendation")
+    public ResponseEntity<AiPolicyRecommendationDto> getLiveAiRecommendation(
+            @PathVariable Long eventId
+    ) {
+        // TODO: 추후 Spring Security가 적용되면 @AuthenticationPrincipal 등을 통해
+        // 실제 로그인한 관리자(Admin)의 ID를 가져와야 합니다.
+        // 현재는 이슈 2번 DB 저장 테스트를 위해 가짜 관리자 ID(1L)를 하드코딩합니다.
+        Long adminUserId = 1L;
 
-        // 서비스 호출 (Gemini 연동)
-        AiPolicyRecommendationDto response = aiService.getRecommendation(dummyMetrics);
+        // 서비스 호출: 실제 Redis 큐 데이터와 Prometheus 에러율을 가져와서 AI에게 물어봄
+        AiPolicyRecommendationDto response = aiService.getRecommendation(eventId, adminUserId);
 
         // 결과 반환
         return ResponseEntity.ok(response);
