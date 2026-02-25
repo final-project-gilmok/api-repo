@@ -40,7 +40,7 @@ class AiPolicyRecommendationControllerTest {
         given(aiService.getRecommendation(eventId, mockAdminUserId)).willReturn(mockResponse);
 
         // when & then
-        mockMvc.perform(get("/api/admin/events/{eventId}/recommendation", eventId)
+        mockMvc.perform(get("/admin/events/{eventId}/recommendation", eventId)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.actionType").value("DECREASE"))
