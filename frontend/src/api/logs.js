@@ -1,11 +1,8 @@
 import { api } from './client';
 
-// 시스템 전체 로그 조회 (Gateway 등에서 넘겨주는 로그)
-export function fetchRecentLogs() {
-    return api.get('/admin/logs');
-}
-
-// 필요하다면 시스템 전체 통계(Stats) 등 다른 어드민 공통 API도 여기에 추가
-export function getSystemStats() {
-    return api.get('/admin/stats');
-}
+export const fetchRecentLogs = async () => {
+    // ⭐️ 아까 브라우저에서 {"status":"success"} 확인했던 바로 그 포트번호를 적으세요! (8080 또는 8081)
+    const response = await fetch('http://localhost:8081/api/admin/logs');
+    const json = await response.json();
+    return json.data; // 성공적으로 받은 data 배열만 리턴!
+};

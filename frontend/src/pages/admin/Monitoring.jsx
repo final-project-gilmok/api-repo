@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom'; // 라우터 훅 추가
 import { fetchRecentLogs } from '../../api/logs.js'; // 방금 만든 API 함수 가져오기
 
 const Monitoring = () => {
     const [logs, setLogs] = useState([]);
+    const navigate = useNavigate();
+    const { eventId } = useParams(); // URL에서 eventId 가져오기
 
     useEffect(() => {
         const getLogs = async () => {
@@ -23,14 +26,26 @@ const Monitoring = () => {
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            {/* ⭐️ 상단 타이틀 및 AI 추천 버튼 영역 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h1>🚦 실시간 트래픽 관제 대시보드</h1>
+                {/* eventId가 있을 때만 AI 추천 버튼 표시 */}
+                {eventId && (
+                    <button
+                        onClick={() => navigate(`/admin/events/${eventId}/ai-recommendation`)}
+                        style={{ padding: '10px 20px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                        🤖 AI 트래픽 분석 및 정책 추천
+                    </button>
+                )}
+            </div>
 
             {/* 상단: 그라파나 대시보드 (Iframe) */}
             <section style={{ marginBottom: '40px' }}>
                 <h2>📊 시스템 메트릭 (Grafana)</h2>
                 <div style={{ border: '1px solid #ccc', borderRadius: '8px', overflow: 'hidden' }}>
                     <iframe
-                        src="http://localhost:3000/goto/dfe6s8njprw1sa?orgId=1&kiosk"
+                        src="http://localhost:3000/goto/cfe9rj1vremf4a?orgId=1&kiosk"
                         width="100%"
                         height="500px"
                         frameBorder="0"
