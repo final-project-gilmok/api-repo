@@ -72,8 +72,8 @@ class UserServiceTest {
     class GetDashboard {
 
         @Test
-        @DisplayName("예약 수와 빈 대기 이벤트 목록을 반환한다")
-        void getDashboard_returnsCountAndEmptyWaiting() {
+        @DisplayName("예약 수와 null 대기 이벤트 목록을 반환한다")
+        void getDashboard_returnsCountAndNullWaiting() {
             Long userId = 1L;
             when(reservationRepository.countByUserId(userId)).thenReturn(2L);
 
