@@ -27,8 +27,8 @@ public class RedisConfig {
 
     @SuppressWarnings("unchecked")
     @Bean
-    public DefaultRedisScript<List> fastAdmissionCycleScript() {
-        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+    public DefaultRedisScript<List<Object>> fastAdmissionCycleScript() {
+        DefaultRedisScript script = new DefaultRedisScript();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/fast-admission-cycle.lua")));
         script.setResultType(List.class);
         return script;
@@ -52,8 +52,8 @@ public class RedisConfig {
 
     @SuppressWarnings("unchecked")
     @Bean
-    public DefaultRedisScript<List> queueStatusScript() {
-        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+    public DefaultRedisScript<List<Long>> queueStatusScript() {
+        DefaultRedisScript script = new DefaultRedisScript();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/queue-status.lua")));
         script.setResultType(List.class);
         return script;
@@ -61,8 +61,8 @@ public class RedisConfig {
 
     @SuppressWarnings("unchecked")
     @Bean
-    public DefaultRedisScript<List> registerIdempotentScript() {
-        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+    public DefaultRedisScript<List<Object>> registerIdempotentScript() {
+        DefaultRedisScript script = new DefaultRedisScript();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/register-idempotent.lua")));
         script.setResultType(List.class);
         return script;
@@ -70,8 +70,8 @@ public class RedisConfig {
 
     @SuppressWarnings("unchecked")
     @Bean
-    public DefaultRedisScript<List> admissionRateScript() {
-        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+    public DefaultRedisScript<List<Long>> admissionRateScript() {
+        DefaultRedisScript script = new DefaultRedisScript();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/admission-rate.lua")));
         script.setResultType(List.class);
         return script;

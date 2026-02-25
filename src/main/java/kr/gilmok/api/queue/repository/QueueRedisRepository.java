@@ -16,10 +16,10 @@ import java.util.concurrent.TimeUnit;
 public class QueueRedisRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
-    private final DefaultRedisScript<List> fastAdmissionCycleScript;
-    private final DefaultRedisScript<List> queueStatusScript;
-    private final DefaultRedisScript<List> registerIdempotentScript;
-    private final DefaultRedisScript<List> admissionRateScript;
+    private final DefaultRedisScript<List<Object>> fastAdmissionCycleScript;
+    private final DefaultRedisScript<List<Long>> queueStatusScript;
+    private final DefaultRedisScript<List<Object>> registerIdempotentScript;
+    private final DefaultRedisScript<List<Long>> admissionRateScript;
     private final DefaultRedisScript<Long> unlockScript;
 
     // === Key helpers ===
@@ -79,7 +79,6 @@ public class QueueRedisRepository {
 
     // === Atomic Status (1 Redis call) ===
 
-    @SuppressWarnings("unchecked")
     public List<Long> getStatusAtomic(String eventId, String queueKeyVal, int windowSeconds) {
         List<Long> result = redisTemplate.execute(
                 queueStatusScript,
@@ -103,7 +102,6 @@ public class QueueRedisRepository {
 
     // === Idempotent Registration (1 Redis call) ===
 
-    @SuppressWarnings("unchecked")
     public List<Object> registerIdempotent(String eventId, String userId,
                                            String newQueueKey, double score, int sessionTtlSeconds) {
         List<Object> result = redisTemplate.execute(
@@ -131,7 +129,6 @@ public class QueueRedisRepository {
 
     // === Admission Rate (1 Redis call) ===
 
-    @SuppressWarnings("unchecked")
     public long recordAdmissionRate(String eventId, long count, long epochSecond) {
         List<Long> result = redisTemplate.execute(
                 admissionRateScript,
@@ -169,7 +166,6 @@ public class QueueRedisRepository {
 
     // === Fast Admission Cycle (single EVAL) ===
 
-    @SuppressWarnings("unchecked")
     public List<Object> runAdmissionCycle(String eventId, long rate, long capacity,
                                           long admittedTtlMs, long graceMs,
                                           int cleanupBatch, int expireBatch) {
