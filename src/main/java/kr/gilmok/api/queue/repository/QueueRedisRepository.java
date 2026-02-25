@@ -1,6 +1,7 @@
 package kr.gilmok.api.queue.repository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
@@ -9,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class QueueRedisRepository {
@@ -89,7 +91,8 @@ public class QueueRedisRepository {
                 String.valueOf(windowSeconds)
         );
         if (result == null) {
-            return Arrays.asList(3L, -1L, 0L, 0L);
+            log.error("Redis script returned null: queueStatusScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: queueStatusScript");
         }
         return result;
     }
@@ -112,10 +115,12 @@ public class QueueRedisRepository {
                 newQueueKey,
                 String.valueOf((long) score),
                 String.valueOf(System.currentTimeMillis()),
-                String.valueOf(sessionTtlSeconds)
+                String.valueOf(sessionTtlSeconds),
+                eventId
         );
         if (result == null) {
-            return Arrays.asList(1L, newQueueKey, 0L);
+            log.error("Redis script returned null: registerIdempotentScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: registerIdempotentScript");
         }
         return result;
     }
@@ -123,8 +128,7 @@ public class QueueRedisRepository {
     // === Admission Rate (1 Redis call) ===
 
     @SuppressWarnings("unchecked")
-    public long recordAdmissionRate(String eventId, long count) {
-        long epochSecond = System.currentTimeMillis() / 1000;
+    public long recordAdmissionRate(String eventId, long count, long epochSecond) {
         List<Long> result = redisTemplate.execute(
                 admissionRateScript,
                 List.of(admitRateKey(eventId)),
@@ -134,7 +138,8 @@ public class QueueRedisRepository {
                 String.valueOf(120)
         );
         if (result == null || result.isEmpty()) {
-            return 0;
+            log.error("Redis script returned null: admissionRateScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: admissionRateScript");
         }
         return result.get(0);
     }
@@ -176,7 +181,8 @@ public class QueueRedisRepository {
                 String.valueOf(expireBatch)
         );
         if (result == null) {
-            return Arrays.asList(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+            log.error("Redis script returned null: fastAdmissionCycleScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: fastAdmissionCycleScript");
         }
         return result;
     }

@@ -195,9 +195,12 @@ class QueueRedisRepositoryIntegrationTest {
     @Test
     @DisplayName("입장률 기록 - INCRBY 및 윈도우 합산이 정상 동작한다")
     void recordAdmissionRate_incrementsAndSums() {
+        // given — 고정 epochSecond로 초 경계 crossing 방지
+        long fixedEpoch = System.currentTimeMillis() / 1000;
+
         // when
-        long total1 = queueRedisRepository.recordAdmissionRate(EVENT_ID, 5);
-        long total2 = queueRedisRepository.recordAdmissionRate(EVENT_ID, 3);
+        long total1 = queueRedisRepository.recordAdmissionRate(EVENT_ID, 5, fixedEpoch);
+        long total2 = queueRedisRepository.recordAdmissionRate(EVENT_ID, 3, fixedEpoch);
 
         // then — 같은 초에 호출되므로 누적
         assertThat(total1).isEqualTo(5);

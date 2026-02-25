@@ -1,5 +1,7 @@
 package kr.gilmok.api.queue.scheduler;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
@@ -18,9 +20,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdmissionScheduler {
 
+    private static final long ADMISSION_LOCK_TTL_MS = 5000;
+
     private final QueueService queueService;
     private final EventRepository eventRepository;
     private final QueueRedisRepository queueRedisRepository;
+    private final MeterRegistry meterRegistry;
 
     @Scheduled(fixedDelay = 1000)
     public void processAdmission() {
@@ -30,8 +35,12 @@ public class AdmissionScheduler {
             String lockValue = UUID.randomUUID().toString();
             boolean locked = false;
             try {
-                locked = queueRedisRepository.tryLock(eventId, lockValue, 900);
+                locked = queueRedisRepository.tryLock(eventId, lockValue, ADMISSION_LOCK_TTL_MS);
                 if (!locked) {
+                    Counter.builder("queue.admission.lock.skipped")
+                            .tag("eventId", eventId)
+                            .register(meterRegistry)
+                            .increment();
                     continue;
                 }
                 queueService.runAdmissionCycle(eventId);

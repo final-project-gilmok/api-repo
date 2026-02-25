@@ -10,6 +10,7 @@
 -- ARGV[3] = score (timestamp)
 -- ARGV[4] = nowMs
 -- ARGV[5] = sessionTtlSeconds
+-- ARGV[6] = eventId
 --
 -- Returns: {isNew, queueKeyString, rank}
 --   isNew: -1 = already admitted (blocked), 0 = existing waiting (idempotent), 1 = newly registered
@@ -25,6 +26,7 @@ local newQueueKeyVal  = ARGV[2]
 local score           = tonumber(ARGV[3]) or 0
 local nowMs           = tonumber(ARGV[4]) or 0
 local sessionTtlSec  = tonumber(ARGV[5]) or 600
+local eventIdVal     = ARGV[6]
 
 -- 1) Check existing registration via user-index
 local existing = redis.call('HGET', userIndexKey, userId)
@@ -50,13 +52,8 @@ redis.call('ZADD', queueKey, 'NX', score, newQueueKeyVal)
 redis.call('HSET', userIndexKey, userId, newQueueKeyVal)
 redis.call('ZADD', heartbeatsKey, nowMs, newQueueKeyVal)
 
--- Set initial EXPIRE on heartbeats key (only on fresh registration)
-redis.call('EXPIRE', heartbeatsKey, 600)
-
 -- Create session HASH
-local sessKey = string.gsub(sessionKey, '__PLACEHOLDER__', newQueueKeyVal)
--- Session key is already resolved by caller, use KEYS[5] directly
-redis.call('HSET', sessionKey, 'eventId', '', 'state', 'WAITING', 'createdAt', nowMs, 'lastSeenAt', nowMs)
+redis.call('HSET', sessionKey, 'eventId', eventIdVal, 'state', 'WAITING', 'createdAt', nowMs, 'lastSeenAt', nowMs)
 redis.call('EXPIRE', sessionKey, sessionTtlSec)
 
 -- Get rank of newly registered member

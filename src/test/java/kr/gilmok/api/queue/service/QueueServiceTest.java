@@ -257,7 +257,7 @@ class QueueServiceTest {
         queueService.runAdmissionCycle("event1");
 
         // then
-        verify(queueRedisRepository).recordAdmissionRate("event1", 3);
+        verify(queueRedisRepository).recordAdmissionRate(eq("event1"), eq(3L), anyLong());
         verify(queueRedisRepository).updateSessionsToAdmitted(eq("event1"), eq(List.of("m1", "m2", "m3")), anyInt());
     }
 
@@ -274,7 +274,7 @@ class QueueServiceTest {
         queueService.runAdmissionCycle("event1");
 
         // then
-        verify(queueRedisRepository, never()).recordAdmissionRate(anyString(), anyLong());
+        verify(queueRedisRepository, never()).recordAdmissionRate(anyString(), anyLong(), anyLong());
         verify(queueRedisRepository, never()).updateSessionsToAdmitted(anyString(), anyList(), anyInt());
     }
 

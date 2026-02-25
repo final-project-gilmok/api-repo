@@ -15,7 +15,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -85,7 +89,8 @@ public class QueueService {
         long etaSeconds = position / admissionRps;
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
-                eventId, userId, queueKey, isNew, position);
+                eventId, maskUserId(userId), queueKey, isNew, position);
+        log.debug("Queue registered with original userId: eventId={}, userId={}", eventId, userId);
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
@@ -132,7 +137,8 @@ public class QueueService {
         long admittedSize = toLong(result.get(6));
 
         if (admittedCount > 0) {
-            queueRedisRepository.recordAdmissionRate(eventId, admittedCount);
+            long epochSecond = System.currentTimeMillis() / 1000;
+            queueRedisRepository.recordAdmissionRate(eventId, admittedCount, epochSecond);
 
             // Extract admitted member queueKeys from index 7+
             List<String> admittedMembers = new ArrayList<>();
@@ -207,5 +213,15 @@ public class QueueService {
         if (obj instanceof Number) return ((Number) obj).longValue();
         if (obj instanceof String) return Long.parseLong((String) obj);
         return 0;
+    }
+
+    private String maskUserId(String userId) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(userId.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash).substring(0, 8);
+        } catch (NoSuchAlgorithmException e) {
+            return "********";
+        }
     }
 }
