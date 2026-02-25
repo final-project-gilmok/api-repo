@@ -44,6 +44,10 @@ public class QueueRedisRepository {
         return "queue:" + eventId + ":session:" + queueKey;
     }
 
+    private String sessionKeyPrefix(String eventId) {
+        return "queue:" + eventId + ":session:";
+    }
+
     private String admitRateKey(String eventId) {
         return "queue:" + eventId + ":admit-rate";
     }
@@ -109,7 +113,7 @@ public class QueueRedisRepository {
                         admittedKey(eventId),
                         userIndexKey(eventId),
                         heartbeatsKey(eventId),
-                        sessionKey(eventId, newQueueKey)
+                        sessionKeyPrefix(eventId)
                 ),
                 userId,
                 newQueueKey,
@@ -157,7 +161,7 @@ public class QueueRedisRepository {
                 byte[] key = sessionKey(eventId, qk).getBytes();
                 connection.hashCommands().hSet(key, stateField, admittedValue);
                 connection.hashCommands().hSet(key, lastSeenField, nowBytes);
-                connection.commands().expire(key, sessionTtlSeconds);
+                connection.keyCommands().expire(key, sessionTtlSeconds);
             }
             return null;
         });
