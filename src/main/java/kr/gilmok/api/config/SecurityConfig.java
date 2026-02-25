@@ -20,6 +20,7 @@ public class SecurityConfig {
                         .requestMatchers("/queue/**").permitAll()
                         .requestMatchers("/events/**").permitAll()
                         .requestMatchers("/reservations/**").permitAll()
+                        .requestMatchers("/users/**").permitAll()
                         .requestMatchers("/admin/**").permitAll() // TODO: 인증 구현 후 hasRole("ADMIN")으로 복원
                         .anyRequest().permitAll()
                 );

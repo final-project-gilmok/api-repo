@@ -24,6 +24,11 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     List<Reservation> findByUserIdOrderByCreatedAtDesc(Long userId);
 
+    @Query("SELECT r.event.id FROM Reservation r WHERE r.userId = :userId GROUP BY r.event.id ORDER BY MAX(r.createdAt) DESC")
+    List<Long> findDistinctEventIdsByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId);
+
+    long countByUserId(Long userId);
+
     List<Reservation> findByEventIdOrderByCreatedAtDesc(Long eventId);
 
     List<Reservation> findByStatusAndCreatedAtBefore(ReservationStatus status, LocalDateTime cutoff);
