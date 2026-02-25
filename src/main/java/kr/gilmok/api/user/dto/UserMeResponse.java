@@ -2,9 +2,10 @@ package kr.gilmok.api.user.dto;
 
 import java.time.LocalDateTime;
 
-
- // TODO: auth-repo 연동 또는 User 캐시 조회로 교체.
-
+/**
+ * GET /users/me 응답. 로그인한 유저의 표시용 정보.
+ * WIP: auth-repo 연동 또는 User 캐시 조회 전까지는 스텁 데이터(displayName, joinedAt)를 반환합니다.
+ */
 public record UserMeResponse(
         Long userId,
         String displayName,
