@@ -13,7 +13,8 @@ public class UserExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleUserIdTypeMismatch(MethodArgumentTypeMismatchException e) {
-        if ("userId".equals(e.getName())) {
+        String name = e.getName();
+        if ("userId".equals(name) || "X-User-Id".equalsIgnoreCase(name)) {
             log.warn("Invalid X-User-Id: {}", e.getValue());
             return ResponseEntity
                     .status(UserErrorCode.INVALID_USER_ID.getHttpStatus())
