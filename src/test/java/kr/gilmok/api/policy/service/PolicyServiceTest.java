@@ -156,7 +156,7 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(false);
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
@@ -172,7 +172,7 @@ class PolicyServiceTest {
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            Long version = policyService.updatePolicy(eventId, request);
+            Long version = policyService.updatePolicy(eventId, request, null);
 
             assertThat(version).isEqualTo(1L);
             verify(historyRepository, never()).save(any());
@@ -191,7 +191,7 @@ class PolicyServiceTest {
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            Long version = policyService.updatePolicy(eventId, request);
+            Long version = policyService.updatePolicy(eventId, request, null);
 
             assertThat(version).isEqualTo(1L);
             verify(historyRepository).save(any());
@@ -209,7 +209,7 @@ class PolicyServiceTest {
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new OptimisticLockException());
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(PolicyErrorCode.POLICY_CONFLICT));

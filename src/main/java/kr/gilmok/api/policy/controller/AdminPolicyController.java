@@ -7,7 +7,9 @@ import kr.gilmok.api.policy.dto.PolicyResponse;
 import kr.gilmok.api.policy.dto.PolicyUpdateRequest;
 import kr.gilmok.api.policy.service.PolicyService;
 import kr.gilmok.common.dto.ApiResponse;
+import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,10 +27,12 @@ public class AdminPolicyController {
 
     @PutMapping("/policy")
     public ApiResponse<Long> updatePolicy(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long eventId,
             @Valid @RequestBody PolicyUpdateRequest request) {
 
-        Long newVersion = policyService.updatePolicy(eventId, request);
+        Long updatedByUserId = principal.user().id();
+        Long newVersion = policyService.updatePolicy(eventId, request, updatedByUserId);
         return ApiResponse.success(newVersion);
     }
 

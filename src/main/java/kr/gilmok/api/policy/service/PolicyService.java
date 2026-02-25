@@ -81,7 +81,7 @@ public class PolicyService {
     }
 
     @Transactional
-    public Long updatePolicy(Long eventId, PolicyUpdateRequest request) {
+    public Long updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId) {
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
@@ -95,14 +95,13 @@ public class PolicyService {
             historyRepository.save(PolicyHistory.from(policy));
         }
 
-        // TODO(auth): 연동 후 updatedByUserId 전달 (현재 null)
         policy.updatePolicy(
                 request.admissionRps(),
                 request.admissionConcurrency(),
                 request.tokenTtlSeconds(),
                 request.blockRules(),
                 request.gateMode(),
-                null,  // updatedByUserId: 현재 사용자 ID 전달 예정
+                updatedByUserId,
                 request.maxRequestsPerSecond(),
                 request.blockDurationMinutes()
         );
