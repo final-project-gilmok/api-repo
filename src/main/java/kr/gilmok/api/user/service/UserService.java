@@ -21,8 +21,8 @@ public class UserService {
     private final EventRepository eventRepository;
 
     @Transactional(readOnly = true)
-    public UserMeResponse getMe(Long userId) {
-        return UserMeResponse.of(userId);
+    public UserMeResponse getMe(Long userId, String username) {
+        return UserMeResponse.of(userId, username);
     }
 
     @Transactional(readOnly = true)
