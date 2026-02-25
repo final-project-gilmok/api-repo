@@ -91,7 +91,7 @@ public class QueueService {
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
                 eventId, maskUserId(userId), queueKey, isNew, position);
-        log.debug("Queue registered with original userId: eventId={}, userId={}", eventId, userId);
+
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
@@ -100,6 +100,12 @@ public class QueueService {
 
     public QueueStatusResponse getStatus(String eventId, String queueKey) {
         List<Long> r = queueRedisRepository.getStatusAtomic(eventId, queueKey, ETA_WINDOW_SECONDS);
+
+        if (r.size() < 4) {
+            log.error("queueStatusScript returned unexpected result size={}, eventId={}", r.size(), eventId);
+            return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
+            }
+
 
         long statusCode = r.get(0);
         long rank = r.get(1);
