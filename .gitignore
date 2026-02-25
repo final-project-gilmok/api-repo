@@ -48,3 +48,7 @@ application-dev.yml
 
 ### OS ###
 nul
+
+### .env ###
+.env.development
+.env.production

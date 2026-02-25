@@ -6,6 +6,7 @@ const Monitoring = () => {
     const [logs, setLogs] = useState([]);
     const navigate = useNavigate();
     const { eventId } = useParams(); // URL에서 eventId 가져오기
+    const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || '';
 
     useEffect(() => {
         const getLogs = async () => {
@@ -46,7 +47,7 @@ const Monitoring = () => {
                 <h2>📊 시스템 메트릭 (Grafana)</h2>
                 <div style={{ border: '1px solid #ccc', borderRadius: '8px', overflow: 'hidden' }}>
                     <iframe
-                        src="http://localhost:3000/goto/cfe9rj1vremf4a?orgId=1&kiosk"
+                        src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
                         width="100%"
                         height="500px"
                         frameBorder="0"
