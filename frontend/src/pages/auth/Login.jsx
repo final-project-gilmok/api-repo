@@ -101,7 +101,7 @@ export default function Login() {
 
                     <div className="text-center mt-4 small">
                         <span className="text-muted">계정이 없으신가요? </span>
-                        <Link to="/signup" className="text-primary text-decoration-none fw-semibold">회원가입</Link>
+                        <Link to="/auth/signup" className="text-primary text-decoration-none fw-semibold">회원가입</Link>
                     </div>
                 </div>
             </div>

@@ -31,7 +31,7 @@ export default function Signup() {
         try {
             await authService.signup(formData)
             alert('회원가입이 완료되었습니다. 로그인해주세요.')
-            navigate('/login') // Assuming a login page exists or will be created
+            navigate('/auth/login')
         } catch (err) {
             setError(err.message || '회원가입 중 오류가 발생했습니다.')
         } finally {
@@ -116,7 +116,7 @@ export default function Signup() {
 
                     <div className="text-center mt-4 small">
                         <span className="text-muted">이미 계정이 있으신가요? </span>
-                        <Link to="/login" className="text-primary text-decoration-none fw-semibold">로그인</Link>
+                        <Link to="/auth/login" className="text-primary text-decoration-none fw-semibold">로그인</Link>
                     </div>
                 </div>
             </div>

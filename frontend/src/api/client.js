@@ -56,13 +56,13 @@ async function request(baseUrl, path, options = {}) {
       } catch (err) {
         // 재발급 실패 시 강제 로그아웃
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.href = '/auth/login';
         throw err;
       }
     } else {
       // RT가 없으면 바로 강제 로그아웃
       localStorage.clear();
-      window.location.href = '/login';
+      window.location.href = '/auth/login';
     }
   }
 
