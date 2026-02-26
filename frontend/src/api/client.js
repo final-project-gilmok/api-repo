@@ -67,6 +67,7 @@ async function request(baseUrl, path, options = {}) {
       // RT가 없으면 바로 강제 로그아웃
       localStorage.clear();
       window.location.href = '/auth/login';
+      throw new Error('No refresh token available');
     }
   }
 
