@@ -54,16 +54,36 @@ class UserServiceTest {
     class GetMe {
 
         @Test
-        @DisplayName("userId로 스텁 UserMeResponse를 반환한다")
-        void getMe_returnsStubResponse() {
+        @DisplayName("userId와 username으로 UserMeResponse를 반환한다")
+        void getMe_returnsResponseWithUsername() {
             Long userId = 1L;
+            String username = "testuser";
 
-            UserMeResponse result = userService.getMe(userId);
+            UserMeResponse result = userService.getMe(userId, username);
 
             assertThat(result).isNotNull();
             assertThat(result.userId()).isEqualTo(1L);
-            assertThat(result.displayName()).isEqualTo("User 1");
-            assertThat(result.joinedAt()).isNull();
+            assertThat(result.displayName()).isEqualTo("testuser");
+        }
+
+        @Test
+        @DisplayName("username이 null이면 userId 기반 displayName을 반환한다")
+        void getMe_usernameNull_usesUserIdAsDisplayName() {
+            Long userId = 2L;
+
+            UserMeResponse result = userService.getMe(userId, null);
+
+            assertThat(result.displayName()).isEqualTo("User 2");
+        }
+
+        @Test
+        @DisplayName("username이 공백이면 userId 기반 displayName을 반환한다")
+        void getMe_usernameBlank_usesUserIdAsDisplayName() {
+            Long userId = 3L;
+
+            UserMeResponse result = userService.getMe(userId, "   ");
+
+            assertThat(result.displayName()).isEqualTo("User 3");
         }
     }
 
