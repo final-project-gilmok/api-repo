@@ -2,6 +2,8 @@ package kr.gilmok.api.ai.controller;
 
 import kr.gilmok.api.ai.dto.AiPolicyRecommendationDto;
 import kr.gilmok.api.ai.service.AiPolicyRecommendationService;
+import kr.gilmok.common.filter.JwtAuthenticationFilter;
+import kr.gilmok.common.security.CustomAuthenticationEntryPoint;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +12,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,6 +26,12 @@ class AiPolicyRecommendationControllerTest {
 
     @MockitoBean
     private AiPolicyRecommendationService aiService;
+
+    @MockitoBean
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @MockitoBean
+    private CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
     @Test
     @DisplayName("GET 요청 시 관리자용 AI 트래픽 정책 추천 결과를 반환한다")

@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"kr.gilmok.api", "kr.gilmok.common"})
 public class ApiApplication {
 
     public static void main(String[] args) {
