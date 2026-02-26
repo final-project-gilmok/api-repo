@@ -215,7 +215,8 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
 
             assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
-                    .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("updatedByUserId must not be null");
             verify(policyRepository, never()).saveAndFlush(any());
         }
 
