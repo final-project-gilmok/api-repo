@@ -40,6 +40,10 @@ async function request(baseUrl, path, options = {}) {
           const newAccessToken = reissueJson.accessToken;
           const newRefreshToken = reissueJson.refreshToken;
 
+          if (!newAccessToken) {
+            throw new Error('Invalid reissue response: accessToken is missing');
+          }
+
           // 로컬 스토리지 업데이트
           localStorage.setItem('accessToken', newAccessToken);
           if (newRefreshToken) {
@@ -69,7 +73,7 @@ async function request(baseUrl, path, options = {}) {
   // 4. 최종 응답 파싱
   const json = await res.json().catch(() => ({}));
 
-  // ⭐ 백엔드 에러 처리를 HTTP 상태 코드(res.ok) 기반으로 변경
+  // 백엔드 에러 처리를 HTTP 상태 코드(res.ok) 기반으로 변경
   if (!res.ok) {
     const err = new Error(json.message || res.statusText || '요청 실패');
     err.status = res.status;
