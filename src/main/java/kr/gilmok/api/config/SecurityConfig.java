@@ -1,6 +1,6 @@
 package kr.gilmok.api.config;
 
-import kr.gilmok.common.config.CommonSecurityConfig;
+import kr.gilmok.common.security.CommonSecurityConfig;
 import kr.gilmok.common.filter.JwtAuthenticationFilter;
 import kr.gilmok.common.security.CustomAuthenticationEntryPoint;
 import org.springframework.context.annotation.Configuration;
