@@ -15,6 +15,10 @@ import SeatSelection from './pages/user/SeatSelection'
 import ReservationConfirm from './pages/user/ReservationConfirm'
 import ReservationResult from './pages/user/ReservationResult'
 import MyReservations from './pages/user/MyReservations'
+import Signup from './pages/auth/Signup'
+import Login from './pages/auth/Login'
+
+
 
 export default function App() {
   return (
@@ -28,7 +32,11 @@ export default function App() {
         <Route path="/events/:eventId/reserve/confirm" element={<ReservationConfirm />} />
         <Route path="/reservations/:code" element={<ReservationResult />} />
         <Route path="/my-reservations" element={<MyReservations />} />
+        <Route path="/auth/signup" element={<Signup />} />
+        <Route path="/auth/login" element={<Login />} />
       </Route>
+
+
 
       {/* 어드민 페이지 */}
       <Route path="/admin" element={<Layout />}>
