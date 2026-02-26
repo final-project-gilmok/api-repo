@@ -1,64 +1,95 @@
-import { useParams, NavLink } from 'react-router-dom'
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom'; // 라우터 훅 추가
+import { fetchRecentLogs } from '../../api/logs.js'; // 방금 만든 API 함수 가져오기
 
-const base = (eventId) => `/admin/events/${eventId}`
-const tabs = [
-  { to: 'policy', label: '정책 설정' },
-  { to: 'monitoring', label: '모니터링' },
-  { to: 'ai-recommendation', label: 'AI 추천' },
-]
+const Monitoring = () => {
+    const [logs, setLogs] = useState([]);
+    const navigate = useNavigate();
+    const { eventId } = useParams(); // URL에서 eventId 가져오기
+    const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || '';
 
-const MOCK_METRICS = [
-  { label: '현재 RPS (Requests Per Second)', value: '125 요청/초', change: '+15%', updated: '10:29:58', desc: '초당 처리되는 요청 수', warn: false },
-  { label: '4xx 오류율 (Client Error Rate)', value: '0.8%', change: '+0.2%', updated: '10:29:58', desc: '클라이언트 요청 오류율', warn: true },
-  { label: '5xx 오류율 (Server Error Rate)', value: '0.1%', change: '-0.1%', updated: '10:29:58', desc: '서버 내부 오류율', warn: false },
-  { label: 'p95 지연 시간 (95th Percentile Latency)', value: '120 ms', change: '+20ms', updated: '10:29:57', desc: '95번째 백분위수 요청 지연 시간', warn: true },
-  { label: 'p99 지연 시간 (99th Percentile Latency)', value: '350 ms', change: '+50ms', updated: '10:29:57', desc: '99번째 백분위수 요청 지연 시간', warn: false },
-  { label: '현재 대기열 길이 (Current Queue Length)', value: '50명', change: '+10', updated: '10:29:59', desc: '현재 대기열에 있는 사용자 수', warn: false },
-]
+    useEffect(() => {
+        const getLogs = async () => {
+            try {
+                const data = await fetchRecentLogs();
+                // ✅ 리뷰 반영: 최후의 방어선으로 한 번 더 빈 배열 보장
+                setLogs(data || []);
+            } catch (error) {
+                console.error('로그 조회 실패:', error);
+            }
+        };
 
-export default function Monitoring() {
-  const { eventId } = useParams()
-  const path = base(eventId)
+        getLogs(); // 처음 페이지 열 때 1번 호출
 
-  return (
-    <>
-      <h1 className="h3 mb-1 fw-bold">이벤트 모니터링: {eventId}</h1>
-      <p className="text-muted mb-2">전체 대시보드 업데이트: 2024년 7월 20일 오전 10:30</p>
+        // 5초마다 데이터 새로고침
+        const interval = setInterval(getLogs, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
-      <ul className="nav event-detail-tabs nav-tabs mb-4">
-        {tabs.map((tab) => (
-          <li key={tab.to} className="nav-item">
-            <NavLink className="nav-link" to={`${path}/${tab.to}`}>
-              {tab.label}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-
-      <div className="row g-3">
-        {MOCK_METRICS.map((m) => (
-          <div key={m.label} className="col-md-6 col-lg-4">
-            <div className="card metric-card h-100">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-start mb-2">
-                  <h3 className="h6 fw-semibold mb-0">
-                    {m.warn && (
-                      <span className="text-danger me-1" title="주의">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                      </span>
-                    )}
-                    {m.label}
-                  </h3>
-                  <span className={`small ${m.change.startsWith('+') ? 'text-danger' : 'text-success'}`}>{m.change}</span>
-                </div>
-                <p className="fs-5 fw-bold text-primary mb-1">{m.value}</p>
-                <p className="text-muted small mb-0">{m.desc}</p>
-                <p className="text-muted small mb-0 mt-1">최근 업데이트: {m.updated}</p>
-              </div>
+    return (
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            {/* ⭐️ 상단 타이틀 및 AI 추천 버튼 영역 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h1>🚦 실시간 트래픽 관제 대시보드</h1>
+                {/* eventId가 있을 때만 AI 추천 버튼 표시 */}
+                {eventId && (
+                    <button
+                        onClick={() => navigate(`/admin/events/${eventId}/ai-recommendation`)}
+                        style={{ padding: '10px 20px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                        🤖 AI 트래픽 분석 및 정책 추천
+                    </button>
+                )}
             </div>
-          </div>
-        ))}
-      </div>
-    </>
-  )
-}
+
+            {/* 상단: 그라파나 대시보드 (Iframe) */}
+            <section style={{ marginBottom: '40px' }}>
+                <h2>📊 시스템 메트릭 (Grafana)</h2>
+                <div style={{ border: '1px solid #ccc', borderRadius: '8px', overflow: 'hidden' }}>
+                    <iframe
+                        src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
+                        width="100%"
+                        height="500px"
+                        frameBorder="0"
+                        title="Grafana Dashboard"
+                    ></iframe>
+                </div>
+            </section>
+
+            {/* 하단: 실시간 API 요청 로그 */}
+            <section>
+                <h2>📝 최신 API 요청 로그 (Top 100)</h2>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead style={{ backgroundColor: '#f8f9fa' }}>
+                        <tr>
+                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>요청 시간</th>
+                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>메서드</th>
+                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>경로 (Path)</th>
+                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>상태 코드</th>
+                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>처리 시간</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {logs.map((log) => (
+                            <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                                <td style={{ padding: '12px' }}>{new Date(log.timestamp).toLocaleString()}</td>
+                                <td style={{ padding: '12px', fontWeight: 'bold', color: log.method === 'GET' ? 'blue' : 'green' }}>
+                                    {log.method}
+                                </td>
+                                <td style={{ padding: '12px' }}>{log.path}</td>
+                                <td style={{ padding: '12px', color: log.status >= 400 ? 'red' : '#28a745', fontWeight: 'bold' }}>
+                                    {log.status}
+                                </td>
+                                <td style={{ padding: '12px' }}>{log.latencyMs} ms</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    );
+};
+
+export default Monitoring;

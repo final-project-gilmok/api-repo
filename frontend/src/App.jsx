@@ -43,6 +43,7 @@ export default function App() {
         <Route path="ai-recommendation" element={<AIRecommendation />} />
         <Route path="settings" element={<div className="p-4">Settings (준비 중)</div>} />
         <Route path="profile" element={<div className="p-4">Admin Profile (준비 중)</div>} />
+        <Route path="logs" element={<Monitoring />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
