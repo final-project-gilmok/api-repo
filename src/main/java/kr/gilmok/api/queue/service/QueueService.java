@@ -6,14 +6,22 @@ import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
+import kr.gilmok.api.queue.exception.QueueErrorCode;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
+import kr.gilmok.common.exception.CustomException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,9 +35,11 @@ public class QueueService {
     private final QueueRedisRepository queueRedisRepository;
     private final MeterRegistry meterRegistry;
 
-    // [핵심 변경] 이벤트 ID를 키로 하는 맵(Map)을 사용!
     private final Map<String, AtomicLong> waitingQueueSizes = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> admittedQueueSizes = new ConcurrentHashMap<>();
+
+    private static final int ETA_WINDOW_SECONDS = 60;
+    private static final int SESSION_TTL_SECONDS = 600;
 
     @Value("${queue.admission-rps:10}")
     private int admissionRps;
@@ -40,130 +50,142 @@ public class QueueService {
     @Value("${queue.grace-period-seconds:180}")
     private int gracePeriodSeconds;
 
-    // [추가 1] 앱 시작 시 초기화를 위해 기본 이벤트 ID 주입
     @Value("${queue.default-event-id:default}")
     private String defaultEventId;
 
     @PostConstruct
     public void init() {
-        // 1. 설정값 검증
         if (admissionRps <= 0) throw new IllegalStateException("queue.admission-rps must be positive");
         if (admittedTtlSeconds <= 0) throw new IllegalStateException("queue.admitted-ttl-seconds must be positive");
         if (gracePeriodSeconds <= 0) throw new IllegalStateException("queue.grace-period-seconds must be positive");
 
-        // 2. [중요] 앱 시작 시 기본 이벤트에 대한 메트릭 초기화 (0 -> 실제값 동기화)
-        // 이걸 안 하면 재시작 직후에는 '0'으로 뜨다가 누군가 접속해야 갱신됩니다.
         updateMetrics(defaultEventId);
         log.info("Initialized metrics for default eventId: {}", defaultEventId);
     }
 
-    // 1. 대기열 등록 (사용자 진입 시점)
+    // === 1. 대기열 등록 (멱등 + admitted 차단) — 1 Redis 호출 ===
+
     public QueueRegisterResponse register(QueueRegisterRequest request) {
         String eventId = request.getEventId();
-
-        // 신규 등록
-        String queueKey = UUID.randomUUID().toString();
+        String userId = request.getUserId();
+        String newQueueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
-        queueRedisRepository.register(eventId, queueKey, score);
-        queueRedisRepository.updateHeartbeat(eventId, queueKey);
 
-        // [추가] 상태가 변했으니 메트릭 갱신!
-        updateMetrics(eventId);
+        List<Object> result = queueRedisRepository.registerIdempotent(
+                eventId, userId, newQueueKey, score, SESSION_TTL_SECONDS);
 
-        Long rank = queueRedisRepository.getRank(eventId, queueKey);
-        long position = rank != null ? rank + 1 : 1;
-        long etaSeconds = calculateEta(eventId, position);
+        long isNew = toLong(result.get(0));
+        String queueKey = String.valueOf(result.get(1));
+        long rank = toLong(result.get(2));
 
-        log.info("Queue registered: eventId={}, queueKey={}, position={}", eventId, queueKey, position);
+        if (isNew == -1) {
+            throw new CustomException(QueueErrorCode.ALREADY_ADMITTED);
+        }
+
+        if (isNew == 1) {
+            updateMetrics(eventId);
+        }
+
+        long position = rank + 1;
+        long etaSeconds = position / admissionRps;
+
+        log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
+                eventId, maskUserId(userId), queueKey, isNew, position);
+
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
 
-    // 2. 대기열 상태 조회 (변화 없음 -> 메트릭 갱신 불필요)
+    // === 2. 대기열 상태 조회 — 1 Redis 호출 ===
+
     public QueueStatusResponse getStatus(String eventId, String queueKey) {
-        // [생략] 조회 로직은 상태를 바꾸지 않으므로 메트릭 갱신 호출 안 함
-        if (queueRedisRepository.isAdmitted(eventId, queueKey)) {
+        List<Long> r = queueRedisRepository.getStatusAtomic(eventId, queueKey, ETA_WINDOW_SECONDS);
+
+        if (r.size() < 4) {
+            log.error("queueStatusScript returned unexpected result size={}, eventId={}", r.size(), eventId);
+            return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
+            }
+
+
+        long statusCode = r.get(0);
+        long rank = r.get(1);
+        long totalSize = r.get(2);
+        long admitCountInWindow = r.get(3);
+
+        if (statusCode == 1) {
             return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0);
         }
-        Long rank = queueRedisRepository.getRank(eventId, queueKey);
-        if (rank != null) {
-            // Update heartbeat for grace period tracking
-            queueRedisRepository.updateHeartbeat(eventId, queueKey);
+
+        if (statusCode == 2) {
             long position = rank + 1;
-            long total = queueRedisRepository.getQueueSize(eventId);
-            long etaSeconds = calculateEta(eventId, position);
+            long etaSeconds = calculateEtaFromCount(position, admitCountInWindow, ETA_WINDOW_SECONDS);
             long pollAfterMs = calculatePollInterval(position);
-            return new QueueStatusResponse(QueueStatus.WAITING, position, total, etaSeconds, pollAfterMs);
+            return new QueueStatusResponse(QueueStatus.WAITING, position, totalSize, etaSeconds, pollAfterMs);
         }
+
         return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
     }
 
-    // 3. 만료 처리 (사용자 이탈 시점)
-    public void expireAdmitted(String eventId) {
-        long cutoffMs = System.currentTimeMillis() - (admittedTtlSeconds * 1000L);
-        long removed = queueRedisRepository.removeExpiredAdmitted(eventId, cutoffMs);
+    // === 3. 통합 입장 사이클 — 반환값 기반 메트릭 (Redis 추가 호출 최소화) ===
 
-        if (removed > 0) {
-            log.info("Expired {} admitted users: eventId={}", removed, eventId);
-            // [추가] 삭제된 유저가 있다면 메트릭 갱신!
-            updateMetrics(eventId);
-        }
-    }
+    public void runAdmissionCycle(String eventId) {
+        long admittedTtlMs = admittedTtlSeconds * 1000L;
+        long graceMs = gracePeriodSeconds * 1000L;
 
-    // 4. 스케줄러 입장 처리 (대기 -> 입장 이동 시점)
-    public void processAdmission(String eventId) {
-        long queueSize = queueRedisRepository.getQueueSize(eventId);
+        List<Object> result = queueRedisRepository.runAdmissionCycle(
+                eventId, admissionRps, admissionRps,
+                admittedTtlMs, graceMs, 100, 100
+        );
 
-        if (queueSize == 0) {
-            // 대기자가 없어도 갱신은 필요함 (0으로 맞춰야 하니까)
-            updateMetrics(eventId);
-            return;
-        }
+        long expiredCount = toLong(result.get(0));
+        long cleanedCount = toLong(result.get(1));
+        long admittedCount = toLong(result.get(2));
+        long waitingSize = toLong(result.get(5));
+        long admittedSize = toLong(result.get(6));
 
-        long tokensAvailable = queueRedisRepository.consumeTokens(eventId, admissionRps, queueSize);
-        if (tokensAvailable > 0) {
-            long admittedCount = queueRedisRepository.admitFromHead(eventId, tokensAvailable);
-            if (admittedCount > 0) {
-                queueRedisRepository.recordAdmission(eventId, admittedCount);
-                log.info("Admitted {} users from queue: eventId={}", admittedCount, eventId);
+        if (admittedCount > 0) {
+            long epochSecond = System.currentTimeMillis() / 1000;
+            queueRedisRepository.recordAdmissionRate(eventId, admittedCount, epochSecond);
 
-                // [추가] 이동이 발생했으면 메트릭 갱신!
-                updateMetrics(eventId);
+            // Extract admitted member queueKeys from index 7+
+            List<String> admittedMembers = new ArrayList<>();
+            for (int i = 7; i < result.size(); i++) {
+                admittedMembers.add(String.valueOf(result.get(i)));
             }
-        } else {
+            if (!admittedMembers.isEmpty()) {
+                queueRedisRepository.updateSessionsToAdmitted(eventId, admittedMembers, SESSION_TTL_SECONDS);
+            }
+
+            log.info("Admitted {} users from queue: eventId={}", admittedCount, eventId);
         }
+        if (expiredCount > 0) {
+            log.info("Expired {} admitted users: eventId={}", expiredCount, eventId);
+        }
+        if (cleanedCount > 0) {
+            log.info("Grace period cleanup removed {} stale users: eventId={}", cleanedCount, eventId);
+        }
+
+        updateMetricsFromValues(eventId, waitingSize, admittedSize);
     }
 
-    // 5. 대기열 이탈 정리 (타임아웃 시점)
-    public void cleanupGracePeriod(String eventId) {
-        long gracePeriodMs = gracePeriodSeconds * 1000L;
-        long removed = queueRedisRepository.cleanupGracePeriod(eventId, gracePeriodMs);
-
-        if (removed > 0) {
-            log.info("Grace period cleanup removed {} stale users: eventId={}", removed, eventId);
-            // [추가] 대기열에서 삭제되었으니 메트릭 갱신!
-            updateMetrics(eventId);
-        }
-    }
+    // === Metrics ===
 
     private void updateMetrics(String eventId) {
-        // 1. Redis에서 현재 값 조회
-        Long waitingSize = queueRedisRepository.getQueueSize(eventId);
-        Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+        long waitingSize = queueRedisRepository.getQueueSize(eventId);
+        long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+        updateMetricsFromValues(eventId, waitingSize, admittedSize);
+    }
 
-        // 2. 게이지 가져오기 (없으면 안전하게 생성)
+    private void updateMetricsFromValues(String eventId, long waitingSize, long admittedSize) {
         AtomicLong waitingGauge = waitingQueueSizes.computeIfAbsent(eventId,
                 id -> registerGauge("queue.waiting.size", "Number of users waiting in queue", id));
-
         AtomicLong admittedGauge = admittedQueueSizes.computeIfAbsent(eventId,
                 id -> registerGauge("queue.admitted.size", "Number of admitted users", id));
 
-        // 3. 값 갱신 (null 체크 포함)
-        waitingGauge.set(waitingSize != null ? waitingSize : 0);
-        admittedGauge.set(admittedSize != null ? admittedSize : 0);
+        waitingGauge.set(waitingSize);
+        admittedGauge.set(admittedSize);
     }
 
-    // [신규] 게이지 등록 도우미 메서드 (코드 중복 제거)
     private AtomicLong registerGauge(String name, String description, String eventId) {
         AtomicLong gauge = new AtomicLong(0);
         Gauge.builder(name, gauge, AtomicLong::doubleValue)
@@ -173,11 +195,12 @@ public class QueueService {
         return gauge;
     }
 
-    // [유지] 유틸 메서드들
-    private long calculateEta(String eventId, long position) {
-        Double avgRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000);
-        if (avgRps != null && avgRps > 0) {
-            return (long) (position / avgRps);
+    // === ETA Calculation ===
+
+    private long calculateEtaFromCount(long position, long admitCountInWindow, int windowSeconds) {
+        if (admitCountInWindow > 0 && windowSeconds > 0) {
+            double rps = (double) admitCountInWindow / windowSeconds;
+            return (long) (position / rps);
         }
         return position / admissionRps;
     }
@@ -192,12 +215,28 @@ public class QueueService {
         }
     }
 
+    private long toLong(Object obj) {
+        if (obj instanceof Long) return (Long) obj;
+        if (obj instanceof Number) return ((Number) obj).longValue();
+        if (obj instanceof String) return Long.parseLong((String) obj);
+        return 0;
+    }
+
+    private String maskUserId(String userId) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(userId.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash).substring(0, 8);
+        } catch (NoSuchAlgorithmException e) {
+            return "********";
+        }
+    }
+
     // [신규 추가] 특정 이벤트의 현재 대기열 상태(사이즈) 정보 조회
     public Map<String, Long> getQueueMetricsForAi(String eventId) {
         Long waitingSize = queueRedisRepository.getQueueSize(eventId);
         Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
 
-        // 이동평균 RPS도 AI가 분석하기 좋은 지표이므로 함께 넘겨주는 것을 추천합니다.
         Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000); // 최근 1분
 
         Map<String, Long> metrics = new HashMap<>();

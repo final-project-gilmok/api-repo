@@ -1,23 +1,29 @@
 package kr.gilmok.api.queue.repository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Set;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class QueueRedisRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
-    private final DefaultRedisScript<Long> tokenBucketScript;
-    private final DefaultRedisScript<Long> admitFromHeadScript;
-    private final DefaultRedisScript<Long> cleanupGracePeriodScript;
+    private final DefaultRedisScript<List<Object>> fastAdmissionCycleScript;
+    private final DefaultRedisScript<List<Long>> queueStatusScript;
+    private final DefaultRedisScript<List<Object>> registerIdempotentScript;
+    private final DefaultRedisScript<List<Long>> admissionRateScript;
+    private final DefaultRedisScript<Long> unlockScript;
+
+    // === Key helpers ===
 
     private String queueKey(String eventId) {
         return "queue:" + eventId;
@@ -31,113 +37,209 @@ public class QueueRedisRepository {
         return "queue:" + eventId + ":token-bucket";
     }
 
+    private String heartbeatsKey(String eventId) {
+        return "queue:" + eventId + ":heartbeats";
+    }
+
+    private String sessionKey(String eventId, String queueKey) {
+        return "queue:" + eventId + ":session:" + queueKey;
+    }
+
+    private String sessionKeyPrefix(String eventId) {
+        return "queue:" + eventId + ":session:";
+    }
+
+    private String admitRateKey(String eventId) {
+        return "queue:" + eventId + ":admit-rate";
+    }
+
+    private String userIndexKey(String eventId) {
+        return "queue:" + eventId + ":user-index";
+    }
+
+    private String lockKey(String eventId) {
+        return "lock:queue:admission:" + eventId;
+    }
+
+    // === Distributed Lock ===
+
+    public boolean tryLock(String eventId, String lockValue, long ttlMs) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(lockKey(eventId), lockValue, ttlMs, TimeUnit.MILLISECONDS);
+        return Boolean.TRUE.equals(acquired);
+    }
+
+    public boolean unlock(String eventId, String lockValue) {
+        Long result = redisTemplate.execute(
+                unlockScript,
+                List.of(lockKey(eventId)),
+                lockValue
+        );
+        return result != null && result == 1L;
+    }
+
+    // === Atomic Status (1 Redis call) ===
+
+    public List<Long> getStatusAtomic(String eventId, String queueKeyVal, int windowSeconds) {
+        List<Long> result = redisTemplate.execute(
+                queueStatusScript,
+                Arrays.asList(
+                        queueKey(eventId),
+                        admittedKey(eventId),
+                        heartbeatsKey(eventId),
+                        sessionKey(eventId, queueKeyVal),
+                        admitRateKey(eventId)
+                ),
+                queueKeyVal,
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(windowSeconds)
+        );
+        if (result == null) {
+            log.error("Redis script returned null: queueStatusScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: queueStatusScript");
+        }
+        return result;
+    }
+
+    // === Idempotent Registration (1 Redis call) ===
+
+    public List<Object> registerIdempotent(String eventId, String userId,
+                                           String newQueueKey, double score, int sessionTtlSeconds) {
+        List<Object> result = redisTemplate.execute(
+                registerIdempotentScript,
+                Arrays.asList(
+                        queueKey(eventId),
+                        admittedKey(eventId),
+                        userIndexKey(eventId),
+                        heartbeatsKey(eventId),
+                        sessionKeyPrefix(eventId)
+                ),
+                userId,
+                newQueueKey,
+                String.valueOf((long) score),
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(sessionTtlSeconds),
+                eventId
+        );
+        if (result == null) {
+            log.error("Redis script returned null: registerIdempotentScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: registerIdempotentScript");
+        }
+        return result;
+    }
+
+    // === Admission Rate (1 Redis call) ===
+
+    public long recordAdmissionRate(String eventId, long count, long epochSecond) {
+        List<Long> result = redisTemplate.execute(
+                admissionRateScript,
+                List.of(admitRateKey(eventId)),
+                String.valueOf(epochSecond),
+                String.valueOf(count),
+                String.valueOf(60),
+                String.valueOf(120)
+        );
+        if (result == null || result.isEmpty()) {
+            log.error("Redis script returned null: admissionRateScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: admissionRateScript");
+        }
+        return result.get(0);
+    }
+
+    // === Session Updates (pipeline) ===
+
+    public void updateSessionsToAdmitted(String eventId, List<String> queueKeys, int sessionTtlSeconds) {
+        redisTemplate.executePipelined((org.springframework.data.redis.core.RedisCallback<Void>) connection -> {
+            byte[] stateField = "state".getBytes();
+            byte[] admittedValue = "ADMITTED".getBytes();
+            byte[] lastSeenField = "lastSeenAt".getBytes();
+            byte[] nowBytes = String.valueOf(System.currentTimeMillis()).getBytes();
+
+            for (String qk : queueKeys) {
+                byte[] key = sessionKey(eventId, qk).getBytes();
+                connection.hashCommands().hSet(key, stateField, admittedValue);
+                connection.hashCommands().hSet(key, lastSeenField, nowBytes);
+                connection.keyCommands().expire(key, sessionTtlSeconds);
+            }
+            return null;
+        });
+    }
+
+    // === Fast Admission Cycle (single EVAL) ===
+
+    public List<Object> runAdmissionCycle(String eventId, long rate, long capacity,
+                                          long admittedTtlMs, long graceMs,
+                                          int cleanupBatch, int expireBatch) {
+        List<Object> result = redisTemplate.execute(
+                fastAdmissionCycleScript,
+                Arrays.asList(queueKey(eventId), admittedKey(eventId), heartbeatsKey(eventId), tokenBucketKey(eventId)),
+                String.valueOf(rate),
+                String.valueOf(capacity),
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(admittedTtlMs),
+                String.valueOf(graceMs),
+                String.valueOf(cleanupBatch),
+                String.valueOf(expireBatch)
+        );
+        if (result == null) {
+            log.error("Redis script returned null: fastAdmissionCycleScript, eventId={}", eventId);
+            throw new IllegalStateException("Redis script returned null: fastAdmissionCycleScript");
+        }
+        return result;
+    }
+
+    // === Moving Average RPS (read-only, no script needed) ===
+
+    public Double getMovingAverageRps(String eventId, long windowMs) {
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(admitRateKey(eventId));
+        if (entries.isEmpty()) {
+            return 0.0;
+        }
+        long windowSeconds = windowMs / 1000;
+        long nowEpoch = System.currentTimeMillis() / 1000;
+        long cutoff = nowEpoch - windowSeconds;
+
+        long totalCount = 0;
+        for (Map.Entry<Object, Object> entry : entries.entrySet()) {
+            long sec = Long.parseLong(entry.getKey().toString());
+            if (sec > cutoff) {
+                totalCount += Long.parseLong(entry.getValue().toString());
+            }
+        }
+        return windowSeconds > 0 ? (double) totalCount / windowSeconds : 0.0;
+    }
+
+    // === Heartbeat (ZADD only, no EXPIRE) ===
+
+    public void updateHeartbeat(String eventId, String queueKey) {
+        String key = heartbeatsKey(eventId);
+        long now = System.currentTimeMillis();
+        redisTemplate.opsForZSet().add(key, queueKey, now);
+    }
+
+    // === Basic registration (kept for backward compat, prefer registerIdempotent) ===
+
     public boolean register(String eventId, String queueKey, double score) {
         Boolean added = redisTemplate.opsForZSet().addIfAbsent(queueKey(eventId), queueKey, score);
         return Boolean.TRUE.equals(added);
     }
 
-    public Long getRank(String eventId, String queueKey) {
-        return redisTemplate.opsForZSet().rank(queueKey(eventId), queueKey);
-    }
-
-    public long getQueueSize(String eventId) {
-        Long size = redisTemplate.opsForZSet().zCard(queueKey(eventId));
-        return size != null ? size : 0;
-    }
+    // === Admission check (used by ReservationService) ===
 
     public boolean isAdmitted(String eventId, String queueKey) {
         Double score = redisTemplate.opsForZSet().score(admittedKey(eventId), queueKey);
         return score != null;
     }
 
-    public long admitFromHead(String eventId, long count) {
-        if (count <= 0) {
-            return 0;
-        }
-        Long admitted = redisTemplate.execute(
-                admitFromHeadScript,
-                Arrays.asList(queueKey(eventId), admittedKey(eventId)),
-                String.valueOf(count),
-                String.valueOf(System.currentTimeMillis())
-        );
-        return admitted != null ? admitted : 0;
-    }
+    // === Size queries (init/healthcheck only) ===
 
-    public long removeExpiredAdmitted(String eventId, long cutoffMs) {
-        Long removed = redisTemplate.opsForZSet().removeRangeByScore(admittedKey(eventId), 0, cutoffMs);
-        return removed != null ? removed : 0;
+    public long getQueueSize(String eventId) {
+        Long size = redisTemplate.opsForZSet().zCard(queueKey(eventId));
+        return size != null ? size : 0;
     }
 
     public long getAdmittedCount(String eventId) {
         Long size = redisTemplate.opsForZSet().zCard(admittedKey(eventId));
         return size != null ? size : 0;
-    }
-
-    // === Admission log (이동평균 ETA) ===
-
-    private String admissionLogKey(String eventId) {
-        return "queue:" + eventId + ":admission-log";
-    }
-
-    public void recordAdmission(String eventId, long count) {
-        String key = admissionLogKey(eventId);
-        long ts = System.currentTimeMillis();
-        redisTemplate.opsForZSet().add(key, ts + ":" + count, ts);
-        long cutoff = ts - TimeUnit.SECONDS.toMillis(300);
-        redisTemplate.opsForZSet().removeRangeByScore(key, 0, cutoff);
-        redisTemplate.expire(key, 300, TimeUnit.SECONDS);
-    }
-
-    public Double getMovingAverageRps(String eventId, long lookbackMs) {
-        String key = admissionLogKey(eventId);
-        long now = System.currentTimeMillis();
-        long from = now - lookbackMs;
-        Set<String> entries = redisTemplate.opsForZSet().rangeByScore(key, from, now);
-        if (entries == null || entries.isEmpty()) {
-            return null;
-        }
-        long totalCount = 0;
-        for (String entry : entries) {
-            String[] parts = entry.split(":");
-            if (parts.length == 2) {
-                totalCount += Long.parseLong(parts[1]);
-            }
-        }
-        double seconds = lookbackMs / 1000.0;
-        return totalCount / seconds;
-    }
-
-    // === Heartbeat & Grace Period ===
-
-    private String heartbeatsKey(String eventId) {
-        return "queue:" + eventId + ":heartbeats";
-    }
-
-    public void updateHeartbeat(String eventId, String queueKey) {
-        String key = heartbeatsKey(eventId);
-        long now = System.currentTimeMillis();
-        redisTemplate.opsForZSet().add(key, queueKey, now);
-        redisTemplate.expire(key, 600, TimeUnit.SECONDS);
-    }
-
-    public long cleanupGracePeriod(String eventId, long gracePeriodMs) {
-        Long removed = redisTemplate.execute(
-                cleanupGracePeriodScript,
-                Arrays.asList(queueKey(eventId), heartbeatsKey(eventId)),
-                String.valueOf(gracePeriodMs),
-                String.valueOf(System.currentTimeMillis())
-        );
-        return removed != null ? removed : 0;
-    }
-
-    public long consumeTokens(String eventId, long maxTokens, long requested) {
-        Long consumed = redisTemplate.execute(
-                tokenBucketScript,
-                Collections.singletonList(tokenBucketKey(eventId)),
-                String.valueOf(maxTokens),
-                String.valueOf(System.currentTimeMillis()),
-                String.valueOf(requested)
-        );
-        return consumed != null ? consumed : 0;
     }
 }

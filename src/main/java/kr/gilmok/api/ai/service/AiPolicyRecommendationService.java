@@ -17,6 +17,7 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@org.springframework.context.annotation.Profile("!test")
 public class AiPolicyRecommendationService {
 
     private final ChatClient chatClient;

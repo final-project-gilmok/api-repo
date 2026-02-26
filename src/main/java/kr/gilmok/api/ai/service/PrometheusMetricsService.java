@@ -12,6 +12,7 @@ import java.time.Duration;
 
 @Slf4j
 @Service
+@org.springframework.context.annotation.Profile("!test")
 public class PrometheusMetricsService {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
