@@ -1,5 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
-const AUTH_BASE = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:9000'
+const AUTH_BASE = import.meta.env.VITE_AUTH_BASE_URL || ''
 
 async function request(baseUrl, path, options = {}) {
   const url = `${baseUrl}${path}`;
