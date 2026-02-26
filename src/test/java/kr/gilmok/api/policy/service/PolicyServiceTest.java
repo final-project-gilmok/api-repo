@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -156,7 +157,7 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(false);
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
@@ -167,17 +168,21 @@ class PolicyServiceTest {
         @DisplayName("정책이 없으면 새로 생성하고 버전 1을 반환한다")
         void updatePolicy_noPolicy_createsAndReturnsVersion1() {
             Long eventId = 1L;
+            Long updatedByUserId = 100L;
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            Long version = policyService.updatePolicy(eventId, request);
+            ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
+
+            Long version = policyService.updatePolicy(eventId, request, updatedByUserId);
 
             assertThat(version).isEqualTo(1L);
             verify(historyRepository, never()).save(any());
             verify(policyRepository).findByEventId(eventId);
-            verify(policyRepository).saveAndFlush(any(Policy.class));
+            verify(policyRepository).saveAndFlush(policyCaptor.capture());
+            assertThat(policyCaptor.getValue().getUpdatedByUserId()).isEqualTo(updatedByUserId);
             verify(policyCacheRepository).save(eq(eventId), any());
         }
 
@@ -185,18 +190,34 @@ class PolicyServiceTest {
         @DisplayName("정책이 있으면 이력 저장 후 버전을 반환한다")
         void updatePolicy_exists_savesHistoryAndReturnsVersion() {
             Long eventId = 1L;
+            Long updatedByUserId = 200L;
             Policy policy = new Policy(eventId);
             PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, 600L, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            Long version = policyService.updatePolicy(eventId, request);
+            ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
+
+            Long version = policyService.updatePolicy(eventId, request, updatedByUserId);
 
             assertThat(version).isEqualTo(1L);
             verify(historyRepository).save(any());
-            verify(policyRepository).saveAndFlush(any(Policy.class));
+            verify(policyRepository).saveAndFlush(policyCaptor.capture());
+            assertThat(policyCaptor.getValue().getUpdatedByUserId()).isEqualTo(updatedByUserId);
             verify(policyCacheRepository).save(eq(eventId), any());
+        }
+
+        @Test
+        @DisplayName("updatedByUserId가 null이면 NullPointerException이 발생한다")
+        void updatePolicy_nullUpdatedByUserId_throwsException() {
+            Long eventId = 1L;
+            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
+
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("updatedByUserId must not be null");
+            verify(policyRepository, never()).saveAndFlush(any());
         }
 
         @Test
@@ -209,7 +230,7 @@ class PolicyServiceTest {
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new OptimisticLockException());
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(PolicyErrorCode.POLICY_CONFLICT));
