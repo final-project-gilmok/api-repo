@@ -90,6 +90,11 @@ export default function MyReservations() {
                     <span className={`badge bg-${statusColor[r.status]}`}>
                       {statusLabel[r.status]}
                     </span>
+                    {r.status === 'CANCELLED' && r.cancelledAt && (
+                      <div className="text-muted small mt-1">
+                        {r.cancelledAt.replace('T', ' ').slice(0, 16)}
+                      </div>
+                    )}
                   </td>
                   <td className="small">{r.createdAt?.slice(0, 10)}</td>
                   <td>
