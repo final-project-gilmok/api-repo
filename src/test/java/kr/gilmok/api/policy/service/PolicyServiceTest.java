@@ -209,6 +209,17 @@ class PolicyServiceTest {
         }
 
         @Test
+        @DisplayName("updatedByUserId가 null이면 NullPointerException이 발생한다")
+        void updatePolicy_nullUpdatedByUserId_throwsException() {
+            Long eventId = 1L;
+            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
+
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
+                    .isInstanceOf(NullPointerException.class);
+            verify(policyRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
         @DisplayName("동시 수정으로 낙관적 락 충돌 시 POLICY_CONFLICT 예외가 발생한다")
         void updatePolicy_optimisticLockConflict_throwsPolicyConflict() {
             Long eventId = 1L;
