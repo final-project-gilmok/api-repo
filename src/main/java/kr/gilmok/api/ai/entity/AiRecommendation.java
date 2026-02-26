@@ -45,14 +45,12 @@ public class AiRecommendation{
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Builder
-    public AiRecommendation(Long eventId, Integer inputWindowSec, String metricsSnapshotJson,
-                            String recommendedPolicyJson, String rationale, Long createdByUserId) {
-        this.eventId = eventId;
+    public AiRecommendation(Long eventId, Integer inputWindowSec, String metricsSnapshotJson, String recommendedPolicyJson, String rationale, Long createdByUserId) {
+        this.eventId = eventId; // ✅ 이 줄이 누락되어 있었다면 꼭 추가하세요!
         this.inputWindowSec = inputWindowSec;
         this.metricsSnapshotJson = metricsSnapshotJson;
         this.recommendedPolicyJson = recommendedPolicyJson;
         this.rationale = rationale;
         this.createdByUserId = createdByUserId;
-        this.applied = false;
     }
 }
