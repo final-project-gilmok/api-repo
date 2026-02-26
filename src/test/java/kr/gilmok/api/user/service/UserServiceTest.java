@@ -67,13 +67,23 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("username이 없으면 userId 기반 displayName을 반환한다")
-        void getMe_usernameBlank_usesUserIdAsDisplayName() {
+        @DisplayName("username이 null이면 userId 기반 displayName을 반환한다")
+        void getMe_usernameNull_usesUserIdAsDisplayName() {
             Long userId = 2L;
 
             UserMeResponse result = userService.getMe(userId, null);
 
             assertThat(result.displayName()).isEqualTo("User 2");
+        }
+
+        @Test
+        @DisplayName("username이 공백이면 userId 기반 displayName을 반환한다")
+        void getMe_usernameBlank_usesUserIdAsDisplayName() {
+            Long userId = 3L;
+
+            UserMeResponse result = userService.getMe(userId, "   ");
+
+            assertThat(result.displayName()).isEqualTo("User 3");
         }
     }
 

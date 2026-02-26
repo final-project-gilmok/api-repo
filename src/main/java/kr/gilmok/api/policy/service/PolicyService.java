@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -82,6 +83,7 @@ public class PolicyService {
 
     @Transactional
     public Long updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId) {
+        Objects.requireNonNull(updatedByUserId, "updatedByUserId must not be null");
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }

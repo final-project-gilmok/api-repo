@@ -5,9 +5,8 @@ public record UserMeResponse(
         String displayName
 ) {
     public static UserMeResponse of(Long userId, String username) {
-        return new UserMeResponse(
-                userId,
-                username != null && !username.isBlank() ? username : "User " + userId
-        );
+        String normalized = (username == null ? null : username.trim());
+        String displayName = (normalized != null && !normalized.isBlank()) ? normalized : "User " + userId;
+        return new UserMeResponse(userId, displayName);
     }
 }
