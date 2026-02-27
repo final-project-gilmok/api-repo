@@ -22,13 +22,13 @@ export default function QueueWaiting() {
   const registerNew = useCallback(() => {
     const fingerprint = sessionStorage.getItem('fingerprint') || crypto.randomUUID()
     sessionStorage.setItem('fingerprint', fingerprint)
-    const userId = sessionStorage.getItem('userId') || crypto.randomUUID()
-    sessionStorage.setItem('userId', userId)
+      const userId = sessionStorage.getItem('userId') || crypto.randomUUID()
+      sessionStorage.setItem('userId', userId)
 
     return fetch(`${API_BASE}/queue/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, userId, fingerprint }),
+        body: JSON.stringify({ eventId, userId, fingerprint }),
     })
       .then((res) => {
         if (!res.ok) throw new Error('등록 실패')

@@ -8,7 +8,7 @@ export default function EventList() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API_BASE}/events`)
+    fetch(`/events`)
       .then((res) => res.json())
       .then((data) => setEvents(data.data || []))
       .catch(() => setEvents([]))

@@ -17,6 +17,10 @@ spring:
       - org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration
       - org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration
 
+app:
+  jwt:
+    secret: test-secret-key-for-unit-testing-1234567
+
 queue:
   admission-rps: 10
   admitted-ttl-seconds: 300
