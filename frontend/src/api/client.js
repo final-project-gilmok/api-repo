@@ -82,8 +82,8 @@ async function request(baseUrl, path, options = {}) {
     throw err;
   }
 
-  // 성공 시 껍데기(data) 없이 전체 JSON 반환
-  return json;
+  // 성공 시 껍데기(data) 없이 전체 JSON 반환 (data 필드가 있으면 추출)
+  return json.data !== undefined ? json.data : json;
 }
 
 export const api = {

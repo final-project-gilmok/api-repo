@@ -23,12 +23,13 @@ export default function Login() {
 
         try {
             const data = await authService.login(formData)
+            const result = data.data || data // Defensive: handle both wrapped and unwrapped
 
             // Store tokens and user info
-            localStorage.setItem('accessToken', data.accessToken)
-            localStorage.setItem('refreshToken', data.refreshToken)
-            localStorage.setItem('username', data.username)
-            localStorage.setItem('role', data.role)
+            localStorage.setItem('accessToken', result.accessToken)
+            localStorage.setItem('refreshToken', result.refreshToken)
+            localStorage.setItem('username', result.username)
+            localStorage.setItem('role', result.role)
 
             navigate('/')
         } catch (err) {
