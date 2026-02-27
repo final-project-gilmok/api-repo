@@ -23,12 +23,18 @@ export default function Login() {
 
         try {
             const data = await authService.login(formData)
+            const result = data.data || data // Defensive: handle both wrapped and unwrapped
+
+            // 필수 필드 검증 및 예외 처리
+            if (!result.accessToken || !result.refreshToken || !result.username || !result.role) {
+                throw new Error('로그인 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.')
+            }
 
             // Store tokens and user info
-            localStorage.setItem('accessToken', data.accessToken)
-            localStorage.setItem('refreshToken', data.refreshToken)
-            localStorage.setItem('username', data.username)
-            localStorage.setItem('role', data.role)
+            localStorage.setItem('accessToken', result.accessToken)
+            localStorage.setItem('refreshToken', result.refreshToken)
+            localStorage.setItem('username', result.username)
+            localStorage.setItem('role', result.role)
 
             navigate('/')
         } catch (err) {
