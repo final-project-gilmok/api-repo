@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api } from '../../api/client'
+
+const API_BASE = ''
 
 export default function QueueWaiting() {
   const { eventId } = useParams()
@@ -19,8 +20,22 @@ export default function QueueWaiting() {
 
   // 새로 등록하고 localStorage에 저장
   const registerNew = useCallback(() => {
-    return api.post('/queue/register', { eventId })
-      .then((d) => {
+    const fingerprint = sessionStorage.getItem('fingerprint') || crypto.randomUUID()
+    sessionStorage.setItem('fingerprint', fingerprint)
+      const userId = sessionStorage.getItem('userId') || crypto.randomUUID()
+      sessionStorage.setItem('userId', userId)
+
+    return fetch(`${API_BASE}/queue/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId, userId, fingerprint }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('등록 실패')
+        return res.json()
+      })
+      .then((data) => {
+        const d = data.data || data
         setQueueKey(d.queueKey)
         setPosition(d.position)
         setEta(d.etaSeconds)
@@ -42,8 +57,15 @@ export default function QueueWaiting() {
       const existing = localStorage.getItem(storageKey)
       if (existing) {
         // 기존 queueKey가 유효한지 확인
-        api.get(`/queue/status?eventId=${eventId}`, { 'X-Queue-Key': existing })
-          .then((d) => {
+        fetch(`${API_BASE}/queue/status?eventId=${eventId}`, {
+          headers: { 'X-Queue-Key': existing },
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error()
+            return res.json()
+          })
+          .then((data) => {
+            const d = data.data || data
             if (d.status === 'EXPIRED') {
               // 만료됨 → 새로 등록
               registerNew()
@@ -80,8 +102,15 @@ export default function QueueWaiting() {
   // 상태 폴링 (동적 간격)
   const poll = useCallback(() => {
     if (!queueKey) return
-    api.get(`/queue/status?eventId=${eventId}`, { 'X-Queue-Key': queueKey })
-      .then((d) => {
+    fetch(`${API_BASE}/queue/status?eventId=${eventId}`, {
+      headers: { 'X-Queue-Key': queueKey },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('상태 조회 실패')
+        return res.json()
+      })
+      .then((data) => {
+        const d = data.data || data
         setStatus(d.status)
         setPosition(d.position)
         setEta(d.etaSeconds)
