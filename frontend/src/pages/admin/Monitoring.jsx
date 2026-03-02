@@ -56,13 +56,19 @@ export default function Monitoring() {
             </div>
           </div>
           <div className="border rounded overflow-hidden">
-            <iframe
-              src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
-              width="100%"
-              height="480"
-              frameBorder="0"
-              title="Grafana Dashboard"
-            />
+            {GRAFANA_BASE_URL ? (
+              <iframe
+                src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
+                width="100%"
+                height="480"
+                frameBorder="0"
+                title="Grafana Dashboard"
+              />
+            ) : (
+              <div className="text-center text-muted py-5">
+                Grafana URL이 설정되지 않았습니다. VITE_GRAFANA_URL 환경 변수를 설정하면 대시보드를 볼 수 있습니다.
+              </div>
+            )}
           </div>
         </div>
       </div>
