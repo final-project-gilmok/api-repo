@@ -152,18 +152,27 @@ export default function AIRecommendation() {
                 <div className="mt-4">
                   <p className="text-muted small mb-2">권장 차단 룰 (Block Rules)</p>
                   <div className="d-flex flex-wrap gap-2">
-                    {aiData.suggestedBlockRules?.ipRanges &&
-                    aiData.suggestedBlockRules.ipRanges.length > 0 ? (
-                      aiData.suggestedBlockRules.ipRanges.map((rule, idx) => (
-                        <span key={idx} className="badge bg-danger px-3 py-2">
+                    {(() => {
+                      const rules = aiData.suggestedBlockRules || {}
+                      const ipRanges = rules.ipRanges || []
+                      const userAgentPatterns = rules.userAgentPatterns || []
+                      const allRules = [
+                        ...ipRanges.map((r) => ({ rule: r, type: 'IP' })),
+                        ...userAgentPatterns.map((r) => ({ rule: r, type: 'User-Agent' })),
+                      ]
+                      if (allRules.length === 0) {
+                        return (
+                          <span className="text-muted small">
+                            추가로 권장되는 차단 룰이 없습니다.
+                          </span>
+                        )
+                      }
+                      return allRules.map(({ rule, type }, idx) => (
+                        <span key={`${type}-${idx}`} className="badge bg-danger px-3 py-2">
                           {rule}
                         </span>
                       ))
-                    ) : (
-                      <span className="text-muted small">
-                        추가로 권장되는 차단 룰이 없습니다.
-                      </span>
-                    )}
+                    })()}
                   </div>
                 </div>
               </div>
