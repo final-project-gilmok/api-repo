@@ -31,9 +31,10 @@ public class QueueController {
 
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<QueueStatusResponse>> getStatus(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @RequestParam String eventId,
             @RequestHeader("X-Queue-Key") String queueKey) {
-        QueueStatusResponse response = queueService.getStatus(eventId, queueKey, "asdf1234", 6);
+        QueueStatusResponse response = queueService.getStatus(eventId, queueKey, principal.getUsername(), principal.user().id());
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
