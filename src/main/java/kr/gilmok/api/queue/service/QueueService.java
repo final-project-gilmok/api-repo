@@ -66,6 +66,9 @@ public class QueueService {
     // === 1. 대기열 등록 (멱등 + admitted 차단) — 1 Redis 호출 ===
 
     public QueueRegisterResponse register(Long userId, QueueRegisterRequest request) {
+        if (userId == null) {
+           throw new IllegalArgumentException("userId must not be null");
+        }
         String eventId = request.getEventId();
         String userIdStr = String.valueOf(userId);
         String newQueueKey = UUID.randomUUID().toString();
