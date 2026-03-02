@@ -22,7 +22,8 @@ export default function QueueWaiting() {
   const registerNew = useCallback(() => {
     const fingerprint = sessionStorage.getItem('fingerprint') || crypto.randomUUID()
     sessionStorage.setItem('fingerprint', fingerprint)
-      const userId = sessionStorage.getItem('userId') || crypto.randomUUID()
+      // const userId = sessionStorage.getItem('userId') || crypto.randomUUID()
+      const userId = 6;
       sessionStorage.setItem('userId', userId)
 
     return fetch(`${API_BASE}/queue/register`, {

@@ -2,14 +2,15 @@ package kr.gilmok.api.queue.service;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.exception.QueueErrorCode;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
+import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.exception.CustomException;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,12 +19,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -32,6 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class QueueService {
 
+    private final TokenService tokenService;
     private final QueueRedisRepository queueRedisRepository;
     private final MeterRegistry meterRegistry;
 
@@ -98,14 +95,13 @@ public class QueueService {
 
     // === 2. 대기열 상태 조회 — 1 Redis 호출 ===
 
-    public QueueStatusResponse getStatus(String eventId, String queueKey) {
+    public QueueStatusResponse getStatus(String eventId, String queueKey, String username, long userId) {
         List<Long> r = queueRedisRepository.getStatusAtomic(eventId, queueKey, ETA_WINDOW_SECONDS);
 
         if (r.size() < 4) {
             log.error("queueStatusScript returned unexpected result size={}, eventId={}", r.size(), eventId);
-            return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
-            }
-
+            return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0, null);
+        }
 
         long statusCode = r.get(0);
         long rank = r.get(1);
@@ -113,17 +109,20 @@ public class QueueService {
         long admitCountInWindow = r.get(3);
 
         if (statusCode == 1) {
-            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0);
+            long safeRank = Math.max(0, rank);
+            String admissionToken = tokenService.issueAdmissionToken(eventId, userId, username, safeRank);
+
+            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0, admissionToken);
         }
 
         if (statusCode == 2) {
             long position = rank + 1;
             long etaSeconds = calculateEtaFromCount(position, admitCountInWindow, ETA_WINDOW_SECONDS);
             long pollAfterMs = calculatePollInterval(position);
-            return new QueueStatusResponse(QueueStatus.WAITING, position, totalSize, etaSeconds, pollAfterMs);
+            return new QueueStatusResponse(QueueStatus.WAITING, position, totalSize, etaSeconds, pollAfterMs, null);
         }
 
-        return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0);
+        return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0, null);
     }
 
     // === 3. 통합 입장 사이클 — 반환값 기반 메트릭 (Redis 추가 호출 최소화) ===
