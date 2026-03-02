@@ -155,7 +155,7 @@ export default function AIRecommendation() {
                     {(() => {
                       const rules = aiData.suggestedBlockRules || {}
                       const ipRanges = rules.ipRanges || []
-                      const userAgentPatterns = rules.userAgentPatterns || []
+                      const userAgentPatterns = rules.userAgentPatterns ? [rules.userAgentPatterns] : []
                       const allRules = [
                         ...ipRanges.map((r) => ({ rule: r, type: 'IP' })),
                         ...userAgentPatterns.map((r) => ({ rule: r, type: 'User-Agent' })),

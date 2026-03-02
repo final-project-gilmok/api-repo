@@ -18,6 +18,7 @@ export default function AdminReservations() {
   const [reservations, setReservations] = useState([])
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const loadReservationsAndStats = () => {
     return Promise.all([
@@ -31,7 +32,10 @@ export default function AdminReservations() {
 
   useEffect(() => {
     setLoading(true)
-    loadReservationsAndStats().catch(() => {}).finally(() => setLoading(false))
+    setError(null)
+    loadReservationsAndStats()
+      .catch(() => setError('예약 정보를 불러오지 못했습니다.'))
+      .finally(() => setLoading(false))
   }, [eventId])
 
   if (loading) {
@@ -46,6 +50,10 @@ export default function AdminReservations() {
           돌아가기
         </Link>
       </div>
+
+      {error && (
+        <div className="alert alert-danger py-2 mb-3">{error}</div>
+      )}
 
       {/* 예약 통계 */}
       {stats && (

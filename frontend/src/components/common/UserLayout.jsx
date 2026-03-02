@@ -53,7 +53,10 @@ export default function UserLayout() {
                                 <NavLink to="/my" className="btn btn-outline-primary btn-sm">
                                     마이페이지
                                 </NavLink>
-                                {(auth.role || '').toString().toUpperCase().includes('ADMIN') && (
+                                {String(auth.role ?? '')
+                                    .split(',')
+                                    .map((r) => r.trim().toUpperCase())
+                                    .includes('ADMIN') && (
                                     <NavLink to="/admin" className="btn btn-outline-secondary btn-sm">
                                         관리자 페이지
                                     </NavLink>
