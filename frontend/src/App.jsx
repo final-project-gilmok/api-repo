@@ -52,7 +52,7 @@ export default function App() {
           <Route path="monitoring" element={<Monitoring />} />
           <Route path="ai-recommendation" element={<AIRecommendation />} />
         </Route>
-        <Route path="ai-recommendation" element={<AIRecommendation />} />
+        <Route path="ai-recommendation" element={<Navigate to="/admin/events" replace />} />
         <Route path="settings" element={<div className="p-4">Settings (준비 중)</div>} />
         <Route path="profile" element={<div className="p-4">Admin Profile (준비 중)</div>} />
         <Route path="logs" element={<Monitoring />} />
