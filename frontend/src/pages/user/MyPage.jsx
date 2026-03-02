@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { getMe, getDashboard } from '../../api/user'
 import MyReservations from './MyReservations'
 
