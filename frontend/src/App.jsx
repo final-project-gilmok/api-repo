@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import Layout from './components/common/Layout'
+import Login, { AdminRouteGuard } from './pages/auth/Login'
 import UserLayout from './components/common/UserLayout'
 import EventManagement from './pages/admin/EventManagement.jsx'
 import EventDetail from './pages/admin/EventDetail.jsx'
+import EventDetailLayout from './components/admin/EventDetailLayout.jsx'
 import PolicySettings from './pages/admin/PolicySettings.jsx'
 import Monitoring from './pages/admin/Monitoring.jsx'
 import AIRecommendation from './pages/admin/AIRecommendation.jsx'
@@ -15,8 +16,8 @@ import SeatSelection from './pages/user/SeatSelection'
 import ReservationConfirm from './pages/user/ReservationConfirm'
 import ReservationResult from './pages/user/ReservationResult'
 import MyReservations from './pages/user/MyReservations'
+import MyPage from './pages/user/MyPage'
 import Signup from './pages/auth/Signup'
-import Login from './pages/auth/Login'
 
 
 
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/events/:eventId/seats" element={<SeatSelection />} />
         <Route path="/events/:eventId/reserve/confirm" element={<ReservationConfirm />} />
         <Route path="/reservations/:code" element={<ReservationResult />} />
+        <Route path="/my" element={<MyPage />} />
         <Route path="/my-reservations" element={<MyReservations />} />
         <Route path="/auth/signup" element={<Signup />} />
         <Route path="/auth/login" element={<Login />} />
@@ -38,16 +40,18 @@ export default function App() {
 
 
 
-      {/* 어드민 페이지 */}
-      <Route path="/admin" element={<Layout />}>
+      {/* 어드민 페이지 (로그인 + ADMIN role 필요) */}
+      <Route path="/admin" element={<AdminRouteGuard />}>
         <Route index element={<Navigate to="/admin/events" replace />} />
         <Route path="events" element={<EventManagement />} />
-        <Route path="events/:eventId" element={<EventDetail />} />
-        <Route path="events/:eventId/policy" element={<PolicySettings />} />
-        <Route path="events/:eventId/monitoring" element={<Monitoring />} />
-        <Route path="events/:eventId/seats" element={<AdminSeatManagement />} />
-        <Route path="events/:eventId/reservations" element={<AdminReservations />} />
-        <Route path="events/:eventId/ai-recommendation" element={<AIRecommendation />} />
+        <Route path="events/:eventId" element={<EventDetailLayout />}>
+          <Route index element={<EventDetail />} />
+          <Route path="policy" element={<PolicySettings />} />
+          <Route path="seats" element={<AdminSeatManagement />} />
+          <Route path="reservations" element={<AdminReservations />} />
+          <Route path="monitoring" element={<Monitoring />} />
+          <Route path="ai-recommendation" element={<AIRecommendation />} />
+        </Route>
         <Route path="ai-recommendation" element={<AIRecommendation />} />
         <Route path="settings" element={<div className="p-4">Settings (준비 중)</div>} />
         <Route path="profile" element={<div className="p-4">Admin Profile (준비 중)</div>} />
