@@ -19,7 +19,7 @@ export default function MyReservations() {
 
   useEffect(() => {
     api.get('/reservations/my')
-      .then((data) => setReservations(data || []))
+      .then((data) => setReservations(Array.isArray(data) ? data : []))
       .catch(() => setReservations([]))
       .finally(() => setLoading(false))
   }, [])
