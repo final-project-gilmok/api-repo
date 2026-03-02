@@ -1,6 +1,35 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation, Link, Navigate } from 'react-router-dom'
 import { authService } from '../../api/auth'
+import Layout from '../../components/common/Layout'
+
+export function AdminRouteGuard() {
+  const location = useLocation()
+  const [allowed, setAllowed] = useState(null)
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    const role = (localStorage.getItem('role') || '').toString().toUpperCase()
+    const isLoggedIn = !!accessToken
+    const isAdmin = role.includes('ADMIN')
+    setAllowed(isLoggedIn && isAdmin ? true : isLoggedIn ? 'no-role' : false)
+  }, [location.pathname])
+
+  if (allowed === null) {
+    return (
+      <div className="text-center py-5">
+        <div className="spinner-border" role="status" />
+      </div>
+    )
+  }
+  if (allowed === false) {
+    return <Navigate to="/auth/login" state={{ from: location }} replace />
+  }
+  if (allowed === 'no-role') {
+    return <Navigate to="/" replace />
+  }
+  return <Layout />
+}
 
 export default function Login() {
     const navigate = useNavigate()
@@ -35,8 +64,14 @@ export default function Login() {
             localStorage.setItem('refreshToken', result.refreshToken)
             localStorage.setItem('username', result.username)
             localStorage.setItem('role', result.role)
+            if (result.userId != null) localStorage.setItem('userId', String(result.userId))
 
-            navigate('/')
+            const role = (result.role || '').toString().toUpperCase()
+            if (role.includes('ADMIN')) {
+                navigate('/admin')
+            } else {
+                navigate('/')
+            }
         } catch (err) {
             setError(err.message || '로그인 중 오류가 발생했습니다.')
         } finally {
