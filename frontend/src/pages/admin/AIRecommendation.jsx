@@ -38,9 +38,10 @@ export default function AIRecommendation() {
         suggested && (suggested.ipRanges?.length > 0 || suggested.userAgentPatterns)
           ? {
               // 백엔드 PolicyUpdateRequest.BlockRules(ipPattern, userAgentPattern, rateLimitKey)에 맞춰 변환
-              ipPattern: Array.isArray(suggested.ipRanges)
-                ? suggested.ipRanges.join(',')
-                : null,
+              ipPattern:
+                Array.isArray(suggested.ipRanges) && suggested.ipRanges.length > 0
+                  ? suggested.ipRanges.join(',')
+                  : null,
               userAgentPattern: suggested.userAgentPatterns || null,
               rateLimitKey: null,
             }

@@ -33,8 +33,14 @@ export default function AdminReservations() {
   useEffect(() => {
     setLoading(true)
     setError(null)
+    setReservations([])
+    setStats(null)
     loadReservationsAndStats()
-      .catch(() => setError('예약 정보를 불러오지 못했습니다.'))
+      .catch(() => {
+        setReservations([])
+        setStats(null)
+        setError('예약 정보를 불러오지 못했습니다.')
+      })
       .finally(() => setLoading(false))
   }, [eventId])
 

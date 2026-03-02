@@ -19,6 +19,7 @@ export default function UserEventDetail() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
     if (!eventId) {
       setLoading(false)
       return
@@ -28,27 +29,34 @@ export default function UserEventDetail() {
     api
       .get('/events')
       .then((data) => {
+        if (cancelled) return
         const list = Array.isArray(data) ? data : []
         const found = list.find((e) => String(e.eventId) === String(eventId))
         setEvent(found || null)
         if (!found) setError('이벤트를 찾을 수 없거나 현재 예매 가능한 상태가 아닙니다.')
       })
       .catch(() => {
+        if (cancelled) return
         setEvent(null)
         setError('이벤트 정보를 불러오지 못했습니다.')
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [eventId])
 
   const handleEnterQueue = () => {
-    if (!eventId) return
+    if (!eventId || event?.status !== 'OPEN') return
     navigate(`/events/${eventId}/queue`)
   }
 
   if (loading) {
     return (
       <div className="text-center py-5">
-        <div className="spinner-border" role="status" />
+        <div className="spinner-border" role="status" aria-label="로딩 중" />
       </div>
     )
   }
