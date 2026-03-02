@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-
-const API_BASE = ''
+import { api } from '../../api/client'
 
 export default function AdminSeatManagement() {
   const { eventId } = useParams()
@@ -16,9 +15,9 @@ export default function AdminSeatManagement() {
   const [newPrice, setNewPrice] = useState('50000')
 
   const loadSeats = () => {
-    return fetch(`${API_BASE}/events/${eventId}/seats`)
-      .then((r) => r.json())
-      .then((data) => setSeats(data.data ?? []))
+    return api
+      .get(`/events/${eventId}/seats`)
+      .then((data) => setSeats(data ?? []))
       .catch(() => setSeats([]))
   }
 
@@ -40,21 +39,9 @@ export default function AdminSeatManagement() {
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/admin/events/${eventId}/seats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ section, totalCount, price }),
-      })
-      const data = await res.json()
-      if (data.status !== 'success') {
-        setError(data.message || '좌석 추가에 실패했습니다.')
-        return
-      }
-      const redisRes = await fetch(`${API_BASE}/admin/events/${eventId}/seats/init-redis`, { method: 'POST' })
-      const redisData = await redisRes.json()
-      if (redisData.status !== 'success') {
-        setError(redisData.message || 'Redis 초기화에 실패했습니다.')
-      }
+      await api.post(`/admin/events/${eventId}/seats`, { section, totalCount, price })
+      // init-redis는 ApiResponse.success(null)을 반환하므로, 반환값(null)을 검사하지 않고 예외만 처리
+      await api.post(`/admin/events/${eventId}/seats/init-redis`, {})
       await loadSeats()
     } catch {
       setError('좌석 추가 요청 중 오류가 발생했습니다.')
@@ -67,10 +54,8 @@ export default function AdminSeatManagement() {
     setInitRedisLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/admin/events/${eventId}/seats/init-redis`, { method: 'POST' })
-      const data = await res.json()
-      if (data.status !== 'success') setError(data.message || 'Redis 초기화에 실패했습니다.')
-      else await loadSeats()
+      await api.post(`/admin/events/${eventId}/seats/init-redis`, {})
+      await loadSeats()
     } catch {
       setError('Redis 초기화 요청 중 오류가 발생했습니다.')
     } finally {

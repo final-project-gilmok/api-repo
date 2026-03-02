@@ -131,7 +131,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      <h2 className="h5 fw-semibold mb-3">빠른 관리 링크</h2>
+      <h2 className="h5 fw-semibold mb-3">이벤트 설정</h2>
       <div className="row g-3">
         {quickLinks.map((link) => (
           <div key={link.to} className="col-md-4">

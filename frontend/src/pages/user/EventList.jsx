@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../../api/client'
 
-const API_BASE = ''
+function formatPeriod(startsAt, endsAt) {
+  if (!startsAt && !endsAt) return null
+  const start = startsAt ? new Date(startsAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g,'.').replace(/\.$/, '') : '?'
+  const end = endsAt ? new Date(endsAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g,'.').replace(/\.$/, '') : '?'
+  return `${start} ~ ${end}`
+}
 
 export default function EventList() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/events`)
-      .then((res) => res.json())
-      .then((data) => setEvents(data.data || []))
+    api
+      .get('/events')
+      .then((data) => {
+        // client.js에서 ApiResponse.data를 이미 풀어주기 때문에 data는 바로 배열이어야 함
+        setEvents(Array.isArray(data) ? data : [])
+      })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false))
   }, [])
@@ -32,10 +41,15 @@ export default function EventList() {
             <div key={evt.eventId} className="col-md-6 col-lg-4">
               <div className="card h-100 border">
                 <div className="card-body d-flex flex-column">
-                  <h5 className="card-title fw-semibold">{evt.name || `이벤트 #${evt.eventId}`}</h5>
+                  <h5 className="card-title fw-semibold">{evt.name ?? evt.eventName ?? `이벤트 #${evt.eventId}`}</h5>
                   <span className={`badge badge-status ${evt.status?.toLowerCase()} mb-2 align-self-start`}>
                     {evt.status}
                   </span>
+                  {(evt.startsAt || evt.endsAt) && (
+                    <p className="text-muted small mb-2">
+                      진행 기간: {formatPeriod(evt.startsAt, evt.endsAt)}
+                    </p>
+                  )}
                   <div className="mt-auto">
                     <Link
                       to={`/events/${evt.eventId}`}
