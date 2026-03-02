@@ -56,7 +56,7 @@ export default function UserLayout() {
                                 {String(auth.role ?? '')
                                     .split(',')
                                     .map((r) => r.trim().toUpperCase())
-                                    .includes('ADMIN') && (
+                                    .some((r) => r.endsWith('ADMIN')) && (
                                     <NavLink to="/admin" className="btn btn-outline-secondary btn-sm">
                                         관리자 페이지
                                     </NavLink>
