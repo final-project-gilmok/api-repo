@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { api } from '../../api/client'
 import SeatMap from '../../components/reservation/SeatMap'
-
-const API_BASE = ''
 
 export default function SeatSelection() {
   const { eventId } = useParams()
@@ -18,9 +17,8 @@ export default function SeatSelection() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetch(`${API_BASE}/events/${eventId}/seats`)
-      .then((res) => res.json())
-      .then((data) => setSeats(data.data || []))
+    api.get(`/events/${eventId}/seats`)
+      .then((data) => setSeats(data || []))
       .catch(() => setError('좌석 정보를 불러올 수 없습니다.'))
       .finally(() => setLoading(false))
   }, [eventId])
@@ -30,33 +28,18 @@ export default function SeatSelection() {
     setSubmitting(true)
     setError(null)
 
-    const userId = sessionStorage.getItem('userId') || '1'
-
-    fetch(`${API_BASE}/reservations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': userId,
-      },
-      body: JSON.stringify({
-        eventId: Number(eventId),
-        seatId: selectedSeat.seatId,
-        quantity,
-        queueKey,
-      }),
+    api.post('/reservations', {
+      eventId: Number(eventId),
+      seatId: selectedSeat.seatId,
+      quantity,
+      queueKey,
     })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === 'error') {
-          setError(data.message || '예약에 실패했습니다.')
-          return
-        }
-        const d = data.data
+      .then((d) => {
         navigate(`/events/${eventId}/reserve/confirm`, {
           state: { reservation: d },
         })
       })
-      .catch(() => setError('예약 요청 중 오류가 발생했습니다.'))
+      .catch((err) => setError(err.message || '예약 요청 중 오류가 발생했습니다.'))
       .finally(() => setSubmitting(false))
   }
 

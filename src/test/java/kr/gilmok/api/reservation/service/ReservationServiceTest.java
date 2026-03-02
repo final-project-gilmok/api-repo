@@ -13,6 +13,8 @@ import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
 import kr.gilmok.common.exception.CustomException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -45,6 +47,8 @@ class ReservationServiceTest {
     private SeatLockRedisRepository seatLockRedisRepository;
     @Mock
     private QueueRedisRepository queueRedisRepository;
+    @Mock
+    private MeterRegistry meterRegistry;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -223,6 +227,9 @@ class ReservationServiceTest {
             when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
             when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
+
+            Counter counter = mock(Counter.class);
+            when(meterRegistry.counter(anyString(), anyString(), anyString())).thenReturn(counter);
 
             // when
             ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode());

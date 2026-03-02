@@ -65,14 +65,14 @@ public class QueueService {
 
     // === 1. 대기열 등록 (멱등 + admitted 차단) — 1 Redis 호출 ===
 
-    public QueueRegisterResponse register(QueueRegisterRequest request) {
+    public QueueRegisterResponse register(Long userId, QueueRegisterRequest request) {
         String eventId = request.getEventId();
-        String userId = request.getUserId();
+        String userIdStr = String.valueOf(userId);
         String newQueueKey = UUID.randomUUID().toString();
         double score = System.currentTimeMillis();
 
         List<Object> result = queueRedisRepository.registerIdempotent(
-                eventId, userId, newQueueKey, score, SESSION_TTL_SECONDS);
+                eventId, userIdStr, newQueueKey, score, SESSION_TTL_SECONDS);
 
         long isNew = toLong(result.get(0));
         String queueKey = String.valueOf(result.get(1));
@@ -90,7 +90,7 @@ public class QueueService {
         long etaSeconds = position / admissionRps;
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
-                eventId, maskUserId(userId), queueKey, isNew, position);
+                eventId, maskUserId(userIdStr), queueKey, isNew, position);
 
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);

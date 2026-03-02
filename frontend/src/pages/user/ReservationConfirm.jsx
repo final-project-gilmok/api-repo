@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { api } from '../../api/client'
 
-const API_BASE = ''
 const HOLD_SECONDS = 300
 
 export default function ReservationConfirm() {
@@ -50,23 +50,11 @@ export default function ReservationConfirm() {
   const handleConfirm = () => {
     setConfirming(true)
     setError(null)
-    const userId = sessionStorage.getItem('userId') || '1'
 
-    fetch(`${API_BASE}/reservations/${reservation.reservationCode}/confirm`, {
-      method: 'POST',
-      headers: { 'X-User-Id': userId },
-    })
-        .then((res) => {
-            if (!res.ok) throw new Error('확정 요청 실패')
-            return res.json()
-            })
-      .then((data) => {
-        if (data.status === 'error') {
-          setError(data.message || '확정 실패')
-          return
-        }
+    api.post(`/reservations/${reservation.reservationCode}/confirm`)
+      .then((d) => {
         navigate(`/reservations/${reservation.reservationCode}`, {
-          state: { reservation: data.data },
+          state: { reservation: d },
         })
       })
       .catch(() => setError('확정 요청 중 오류가 발생했습니다.'))
@@ -74,16 +62,8 @@ export default function ReservationConfirm() {
   }
 
   const handleCancel = () => {
-    const userId = sessionStorage.getItem('userId') || '1'
-
-    fetch(`${API_BASE}/reservations/${reservation.reservationCode}`, {
-      method: 'DELETE',
-      headers: { 'X-User-Id': userId },
-    })
-        .then((res) => {
-            if (!res.ok) throw new Error('취소 실패')
-            navigate(`/events/${eventId}/seats`)
-            })
+    api.delete(`/reservations/${reservation.reservationCode}`)
+      .then(() => navigate(`/events/${eventId}/seats`))
       .catch(() => setError('취소 실패'))
   }
 
