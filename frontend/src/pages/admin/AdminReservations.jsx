@@ -31,7 +31,7 @@ export default function AdminReservations() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([loadReservationsAndStats()]).catch(() => {}).finally(() => setLoading(false))
+    loadReservationsAndStats().catch(() => {}).finally(() => setLoading(false))
   }, [eventId])
 
   if (loading) {

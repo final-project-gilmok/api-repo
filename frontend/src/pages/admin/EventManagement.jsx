@@ -5,7 +5,7 @@ import { getEvents, createEvent } from '../../api/events.js'
 const statusLabel = { OPEN: 'OPEN', DRAFT: 'DRAFT', CLOSED: 'CLOSED' }
 const statusClass = { OPEN: 'open', DRAFT: 'draft', CLOSED: 'closed' }
 
-// 백엔드 PolicyDefaults와 동일한 기본값 (참고용 표시)
+// TODO: api-repo policy/constants/PolicyDefaults.java 와 값 동기화 필요.
 const POLICY_DEFAULT_LABEL = {
   admissionRps: 'Admission RPS',
   admissionConcurrency: 'Admission Concurrency',
@@ -226,13 +226,14 @@ export default function EventManagement() {
                   {policyDefaultOpen && (
                     <div className="small text-muted border rounded p-3 mt-2 bg-light">
                       <div className="row g-2">
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.admissionRps}: {POLICY_DEFAULT_VALUES.admissionRps}</div>
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.admissionConcurrency}: {POLICY_DEFAULT_VALUES.admissionConcurrency}</div>
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.tokenTtlSeconds}: {POLICY_DEFAULT_VALUES.tokenTtlSeconds}</div>
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.maxRequestsPerSecond}: {POLICY_DEFAULT_VALUES.maxRequestsPerSecond}</div>
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.blockDurationMinutes}: {POLICY_DEFAULT_VALUES.blockDurationMinutes}</div>
-                        <div className="col-6 col-md-4">{POLICY_DEFAULT_LABEL.gateMode}: {POLICY_DEFAULT_VALUES.gateMode}</div>
-                        <div className="col-12">{POLICY_DEFAULT_LABEL.blockRules}: {POLICY_DEFAULT_VALUES.blockRules}</div>
+                        {Object.entries(POLICY_DEFAULT_LABEL).map(([key, label]) => (
+                          <div
+                            key={key}
+                            className={key === 'blockRules' ? 'col-12' : 'col-6 col-md-4'}
+                          >
+                            {label}: {POLICY_DEFAULT_VALUES[key]}
+                          </div>
+                        ))}
                       </div>
                       <p className="mb-0 mt-2 small">이벤트 생성 시 위 기본값이 적용됩니다. 생성 후 정책 설정에서 변경할 수 있습니다.</p>
                     </div>
