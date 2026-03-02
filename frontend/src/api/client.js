@@ -66,13 +66,17 @@ async function request(baseUrl, path, options = {}) {
       } catch (err) {
         // 재발급 실패 시 auth 키만 제거 후 로그인으로
         const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
-        authKeys.forEach((k) => localStorage.removeItem(k));
+        authKeys.forEach((k) => {
+          localStorage.removeItem(k);
+        });
         window.location.href = '/auth/login';
         throw err;
       }
     } else {
       const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
-      authKeys.forEach((k) => localStorage.removeItem(k));
+      authKeys.forEach((k) => {
+        localStorage.removeItem(k);
+      });
       window.location.href = '/auth/login';
       throw new Error('No refresh token available');
     }
