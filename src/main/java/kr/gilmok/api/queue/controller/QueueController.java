@@ -6,9 +6,11 @@ import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.service.QueueService;
 import kr.gilmok.common.dto.ApiResponse;
+import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,8 +22,10 @@ public class QueueController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<QueueRegisterResponse>> register(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @Valid @RequestBody QueueRegisterRequest request) {
-        QueueRegisterResponse response = queueService.register(request);
+        Long userId = principal.user().id();
+        QueueRegisterResponse response = queueService.register(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 

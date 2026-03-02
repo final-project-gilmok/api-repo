@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-
-const API_BASE = ''
+import { api } from '../../api/client'
 
 const statusLabel = {
   HOLDING: '선점 중',
@@ -18,37 +17,26 @@ export default function MyReservations() {
   const [reservations, setReservations] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const userId = sessionStorage.getItem('userId') || '1'
-
   useEffect(() => {
-    fetch(`${API_BASE}/reservations/my`, {
-      headers: { 'X-User-Id': userId },
-    })
-      .then((res) => res.json())
-      .then((data) => setReservations(data.data || []))
+    api.get('/reservations/my')
+      .then((data) => setReservations(Array.isArray(data) ? data : []))
       .catch(() => setReservations([]))
       .finally(() => setLoading(false))
-  }, [userId])
+  }, [])
 
   const handleCancel = (code) => {
     if (!confirm('예약을 취소하시겠습니까?')) return
 
-    fetch(`${API_BASE}/reservations/${code}`, {
-      method: 'DELETE',
-      headers: { 'X-User-Id': userId },
-    })
-      .then((res) => res.json())
+    api.delete(`/reservations/${code}`)
       .then((data) => {
-          if (data.status === 'error') {
-              alert(data.message || '취소에 실패했습니다.')
-              return }
-        if (data.data) {
           setReservations((prev) =>
-            prev.map((r) => (r.reservationCode === code ? data.data : r))
+              prev.map((r) => {
+                  if (r.reservationCode !== code) return r
+                      return data?.reservationCode ? data : { ...r, status: 'CANCELLED' }
+                     })
           )
-        }
       })
-        .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
+      .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
   }
 
   if (loading) {
