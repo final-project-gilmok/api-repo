@@ -5,7 +5,9 @@ import kr.gilmok.api.reservation.dto.ReservationCreateRequest;
 import kr.gilmok.api.reservation.dto.ReservationResponse;
 import kr.gilmok.api.reservation.service.ReservationService;
 import kr.gilmok.common.dto.ApiResponse;
+import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,35 +21,35 @@ public class ReservationController {
 
     @PostMapping
     public ApiResponse<ReservationResponse> create(
-            @RequestHeader("X-User-Id") Long userId,
+            @AuthenticationPrincipal CustomUserDetails principal,
             @Valid @RequestBody ReservationCreateRequest request) {
-        return ApiResponse.success(reservationService.createReservation(userId, request));
+        return ApiResponse.success(reservationService.createReservation(principal.user().id(), request));
     }
 
     @PostMapping("/{code}/confirm")
     public ApiResponse<ReservationResponse> confirm(
-            @RequestHeader("X-User-Id") Long userId,
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable String code) {
-        return ApiResponse.success(reservationService.confirmReservation(userId, code));
+        return ApiResponse.success(reservationService.confirmReservation(principal.user().id(), code));
     }
 
     @DeleteMapping("/{code}")
     public ApiResponse<ReservationResponse> cancel(
-            @RequestHeader("X-User-Id") Long userId,
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable String code) {
-        return ApiResponse.success(reservationService.cancelReservation(userId, code));
+        return ApiResponse.success(reservationService.cancelReservation(principal.user().id(), code));
     }
 
     @GetMapping("/{code}")
     public ApiResponse<ReservationResponse> getReservation(
-            @RequestHeader("X-User-Id") Long userId,
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable String code) {
-        return ApiResponse.success(reservationService.getReservation(userId, code));
+        return ApiResponse.success(reservationService.getReservation(principal.user().id(), code));
     }
 
     @GetMapping("/my")
     public ApiResponse<List<ReservationResponse>> getMyReservations(
-            @RequestHeader("X-User-Id") Long userId) {
-        return ApiResponse.success(reservationService.getMyReservations(userId));
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ApiResponse.success(reservationService.getMyReservations(principal.user().id()));
     }
 }
