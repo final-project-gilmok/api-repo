@@ -21,6 +21,8 @@ export default function UserEventDetail() {
   useEffect(() => {
     let cancelled = false
     if (!eventId) {
+      setEvent(null)
+      setError('이벤트를 찾을 수 없습니다.')
       setLoading(false)
       return
     }
@@ -104,7 +106,7 @@ export default function UserEventDetail() {
           <button
             className="btn btn-primary btn-lg"
             onClick={handleEnterQueue}
-            disabled={event.status !== 'OPEN'}
+            disabled={!eventId || event.status !== 'OPEN'}
           >
             대기열 입장
           </button>
