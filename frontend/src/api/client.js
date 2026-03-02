@@ -34,11 +34,12 @@ async function request(baseUrl, path, options = {}) {
         });
 
         if (reissueRes.ok) {
-          // 재발급 성공! (보여주신 JSON 구조에 맞춤)
+          // 재발급 성공! (data 래핑 여부 모두 처리)
           const reissueJson = await reissueRes.json();
+          const reissueData = reissueJson.data !== undefined ? reissueJson.data : reissueJson;
 
-          const newAccessToken = reissueJson.accessToken;
-          const newRefreshToken = reissueJson.refreshToken;
+          const newAccessToken = reissueData.accessToken;
+          const newRefreshToken = reissueData.refreshToken;
 
           if (!newAccessToken) {
             throw new Error('Invalid reissue response: accessToken is missing');
@@ -87,9 +88,10 @@ async function request(baseUrl, path, options = {}) {
 }
 
 export const api = {
-  get: (path) => request(API_BASE, path, { method: 'GET' }),
-  post: (path, body) => request(API_BASE, path, { method: 'POST', body: JSON.stringify(body) }),
+  get: (path, headers) => request(API_BASE, path, { method: 'GET', headers }),
+  post: (path, body) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: (path, body) => request(API_BASE, path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: (path) => request(API_BASE, path, { method: 'DELETE' }),
 }
 
 export const authApi = {

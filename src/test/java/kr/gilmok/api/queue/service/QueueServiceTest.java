@@ -35,6 +35,9 @@ class QueueServiceTest {
 
     private QueueService queueService;
 
+    private static final Long USER_ID = 1L;
+    private static final String USER_ID_STR = "1";
+
     @BeforeEach
     void setUp() {
         queueService = new QueueService(queueRedisRepository, meterRegistry);
@@ -43,21 +46,12 @@ class QueueServiceTest {
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
     }
 
-    private QueueRegisterRequest createRequest(String eventId, String userId, String fingerprint) {
+    private QueueRegisterRequest createRequest(String eventId) {
         try {
             QueueRegisterRequest request = new QueueRegisterRequest();
             var eventIdField = QueueRegisterRequest.class.getDeclaredField("eventId");
             eventIdField.setAccessible(true);
             eventIdField.set(request, eventId);
-
-            var userIdField = QueueRegisterRequest.class.getDeclaredField("userId");
-            userIdField.setAccessible(true);
-            userIdField.set(request, userId);
-
-            var fingerprintField = QueueRegisterRequest.class.getDeclaredField("fingerprint");
-            fingerprintField.setAccessible(true);
-            fingerprintField.set(request, fingerprint);
-
             return request;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -70,32 +64,32 @@ class QueueServiceTest {
     @DisplayName("등록 - 신규 등록 시 새 queueKey와 position을 반환한다")
     void register_newUser_returnsQueueKeyAndPosition() {
         // given
-        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
         )).willReturn(Arrays.asList(1L, "new-queue-key", 0L));
 
         // when
-        QueueRegisterResponse response = queueService.register(request);
+        QueueRegisterResponse response = queueService.register(USER_ID, request);
 
         // then
         assertThat(response.getQueueKey()).isEqualTo("new-queue-key");
         assertThat(response.getPosition()).isEqualTo(1);
         verify(queueRedisRepository).registerIdempotent(
-                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt());
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt());
     }
 
     @Test
     @DisplayName("등록 - 중복 등록 시 기존 queueKey를 반환한다 (멱등)")
     void register_duplicateUser_returnsExistingQueueKey() {
         // given
-        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
         )).willReturn(Arrays.asList(0L, "existing-queue-key", 5L));
 
         // when
-        QueueRegisterResponse response = queueService.register(request);
+        QueueRegisterResponse response = queueService.register(USER_ID, request);
 
         // then
         assertThat(response.getQueueKey()).isEqualTo("existing-queue-key");
@@ -108,13 +102,13 @@ class QueueServiceTest {
     @DisplayName("등록 - 이미 admitted 상태면 예외를 던진다")
     void register_alreadyAdmitted_throwsException() {
         // given
-        QueueRegisterRequest request = createRequest("event1", "user1", "fp1");
+        QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq("user1"), anyString(), anyDouble(), anyInt()
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
         )).willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
 
         // when & then
-        assertThatThrownBy(() -> queueService.register(request))
+        assertThatThrownBy(() -> queueService.register(USER_ID, request))
                 .isInstanceOf(CustomException.class);
     }
 

@@ -21,7 +21,6 @@ public class SecurityConfig extends CommonSecurityConfig {
     protected void configureRequestMatchers(
             AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth) {
         auth
-                .requestMatchers("/queue/**").permitAll()
                 .requestMatchers("/events/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")

@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
                 '/admin': backendProxy,
                 '/reservations': backendProxy,
                 '/queue': backendProxy,
+                '/auth': backendProxy,
             },
         },
     }
