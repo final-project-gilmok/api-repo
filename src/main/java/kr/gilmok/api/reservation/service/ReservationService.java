@@ -183,6 +183,12 @@ public class ReservationService {
             );
         }
 
+        // 대기열 admitted 정리 → 재입장 가능하도록
+        queueRedisRepository.removeAdmittedUser(
+                String.valueOf(reservation.getEvent().getId()),
+                String.valueOf(reservation.getUserId())
+        );
+
         log.info("Reservation cancelled: code={}", reservationCode);
 
         return ReservationResponse.from(reservation);

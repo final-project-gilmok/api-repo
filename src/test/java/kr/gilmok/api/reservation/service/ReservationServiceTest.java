@@ -283,7 +283,7 @@ class ReservationServiceTest {
     class CancelReservation {
 
         @Test
-        @DisplayName("HOLDING 예약 취소 시 Redis 잠금이 해제되고 CANCELLED 상태로 변경된다")
+        @DisplayName("HOLDING 예약 취소 시 Redis 잠금이 해제되고 대기열 admitted가 정리된다")
         void cancel_holding_restoresRedis() {
             // given
             Event event = createEvent(1L);
@@ -299,6 +299,30 @@ class ReservationServiceTest {
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
             verify(seatLockRedisRepository).unlockAndRestore(1L, 10L, 1L);
+            verify(queueRedisRepository).removeAdmittedUser("1", "1");
+        }
+
+        @Test
+        @DisplayName("CONFIRMED 예약 취소 시 좌석 복구 + 대기열 admitted 정리가 된다")
+        void cancel_confirmed_restoresSeatAndCleansQueue() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+            reservation.confirm(); // HOLDING → CONFIRMED
+
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+            when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
+
+            // when
+            ReservationResponse response = reservationService.cancelReservation(1L, reservation.getReservationCode());
+
+            // then
+            assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+            verify(seatRepository).findByIdForUpdate(10L);
+            verify(seatLockRedisRepository).initAvailable(eq(1L), eq(10L), anyInt());
+            verify(queueRedisRepository).removeAdmittedUser("1", "1");
         }
 
         @Test
