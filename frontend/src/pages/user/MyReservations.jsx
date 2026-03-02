@@ -29,11 +29,12 @@ export default function MyReservations() {
 
     api.delete(`/reservations/${code}`)
       .then((data) => {
-        if (data) {
           setReservations((prev) =>
-            prev.map((r) => (r.reservationCode === code ? data : r))
+              prev.map((r) => {
+                  if (r.reservationCode !== code) return r
+                      return data?.reservationCode ? data : { ...r, status: 'CANCELLED' }
+                     })
           )
-        }
       })
       .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
   }
