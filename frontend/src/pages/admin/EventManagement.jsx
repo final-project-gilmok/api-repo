@@ -5,6 +5,26 @@ import { getEvents, createEvent } from '../../api/events.js'
 const statusLabel = { OPEN: 'OPEN', DRAFT: 'DRAFT', CLOSED: 'CLOSED' }
 const statusClass = { OPEN: 'open', DRAFT: 'draft', CLOSED: 'closed' }
 
+// TODO: api-repo policy/constants/PolicyDefaults.java 와 값 동기화 필요.
+const POLICY_DEFAULT_LABEL = {
+  admissionRps: 'Admission RPS',
+  admissionConcurrency: 'Admission Concurrency',
+  tokenTtlSeconds: 'Token TTL (초)',
+  maxRequestsPerSecond: 'Max RPS',
+  blockDurationMinutes: 'Block Duration (분)',
+  gateMode: 'Gate Mode',
+  blockRules: 'Block Rules',
+}
+const POLICY_DEFAULT_VALUES = {
+  admissionRps: 0,
+  admissionConcurrency: 0,
+  tokenTtlSeconds: 300,
+  maxRequestsPerSecond: 100,
+  blockDurationMinutes: 10,
+  gateMode: 'ROUTING_ENABLED',
+  blockRules: '없음 (필요 시 정책 설정에서 추가)',
+}
+
 function toDateStr(ldt) {
   if (!ldt) return ''
   const d = new Date(ldt)
@@ -20,6 +40,7 @@ export default function EventManagement() {
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [policyDefaultOpen, setPolicyDefaultOpen] = useState(false)
 
   const loadEvents = async () => {
     setLoading(true)
@@ -54,6 +75,7 @@ export default function EventManagement() {
         description: trimmedDesc || ' ',
         startsAt: start,
         endsAt: end,
+        policy: {}, // 백엔드 PolicyDefaults 적용
       })
       setName('')
       setDescription('')
@@ -191,6 +213,33 @@ export default function EventManagement() {
                   />
                   <p className="form-text small text-muted">비우면 기본값(현재/7일 후)으로 전송됩니다.</p>
                 </div>
+
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2"
+                    onClick={() => setPolicyDefaultOpen((o) => !o)}
+                    aria-expanded={policyDefaultOpen}
+                  >
+                    {policyDefaultOpen ? '▼' : '▶'} 기본 정책 (PolicyDefault)
+                  </button>
+                  {policyDefaultOpen && (
+                    <div className="small text-muted border rounded p-3 mt-2 bg-light">
+                      <div className="row g-2">
+                        {Object.entries(POLICY_DEFAULT_LABEL).map(([key, label]) => (
+                          <div
+                            key={key}
+                            className={key === 'blockRules' ? 'col-12' : 'col-6 col-md-4'}
+                          >
+                            {label}: {POLICY_DEFAULT_VALUES[key]}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mb-0 mt-2 small">이벤트 생성 시 위 기본값이 적용됩니다. 생성 후 정책 설정에서 변경할 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   {submitting ? '생성 중...' : '이벤트 생성'}
                 </button>
