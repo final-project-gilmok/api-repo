@@ -89,7 +89,7 @@ async function request(baseUrl, path, options = {}) {
 
 export const api = {
   get: (path, headers) => request(API_BASE, path, { method: 'GET', headers }),
-  post: (path, body, options = {}) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined, ...options }),
+  post: (path, body) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: (path, body) => request(API_BASE, path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: (path) => request(API_BASE, path, { method: 'DELETE' }),
 }
