@@ -22,6 +22,7 @@ public class QueueRedisRepository {
     private final DefaultRedisScript<List<Object>> registerIdempotentScript;
     private final DefaultRedisScript<List<Long>> admissionRateScript;
     private final DefaultRedisScript<Long> unlockScript;
+    private final DefaultRedisScript<Long> removeAdmittedUserScript;
 
     // === Key helpers ===
 
@@ -241,5 +242,20 @@ public class QueueRedisRepository {
     public long getAdmittedCount(String eventId) {
         Long size = redisTemplate.opsForZSet().zCard(admittedKey(eventId));
         return size != null ? size : 0;
+    }
+
+    // === Remove Admitted User (reservation cancellation) ===
+
+    public void removeAdmittedUser(String eventId, String userId) {
+        Long result = redisTemplate.execute(
+                removeAdmittedUserScript,
+                Arrays.asList(
+                        userIndexKey(eventId),
+                        admittedKey(eventId),
+                        sessionKeyPrefix(eventId)
+                ),
+                userId
+        );
+        log.info("removeAdmittedUser: eventId={}, userId={}, removed={}", eventId, userId, result);
     }
 }

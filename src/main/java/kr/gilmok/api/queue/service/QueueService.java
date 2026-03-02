@@ -79,7 +79,10 @@ public class QueueService {
         long rank = toLong(result.get(2));
 
         if (isNew == -1) {
-            throw new CustomException(QueueErrorCode.ALREADY_ADMITTED);
+            // 이미 admitted 상태 → 대기열 통과 완료이므로 기존 queueKey 반환
+            log.info("Queue already admitted: eventId={}, userId={}, queueKey={}",
+                    eventId, maskUserId(userIdStr), queueKey);
+            return new QueueRegisterResponse(queueKey, 0, 0);
         }
 
         if (isNew == 1) {
@@ -91,7 +94,6 @@ public class QueueService {
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
                 eventId, maskUserId(userIdStr), queueKey, isNew, position);
-
 
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
