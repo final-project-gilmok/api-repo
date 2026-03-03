@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getEvent, openEvent, closeEvent } from '../../api/events.js'
 
@@ -22,7 +22,7 @@ export default function EventDetail() {
   const [error, setError] = useState(null)
   const [actioning, setActioning] = useState(false)
 
-  const loadEvent = async () => {
+  const loadEvent = useCallback(async () => {
     if (!eventId) return
     setLoading(true)
     setError(null)
@@ -35,11 +35,11 @@ export default function EventDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [eventId])
 
   useEffect(() => {
     loadEvent()
-  }, [eventId])
+  }, [loadEvent])
 
   const handleOpen = async () => {
     setActioning(true)
@@ -131,7 +131,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      <h2 className="h5 fw-semibold mb-3">빠른 관리 링크</h2>
+      <h2 className="h5 fw-semibold mb-3">이벤트 설정</h2>
       <div className="row g-3">
         {quickLinks.map((link) => (
           <div key={link.to} className="col-md-4">

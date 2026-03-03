@@ -22,6 +22,7 @@ public class QueueRedisRepository {
     private final DefaultRedisScript<List<Object>> registerIdempotentScript;
     private final DefaultRedisScript<List<Long>> admissionRateScript;
     private final DefaultRedisScript<Long> unlockScript;
+    private final DefaultRedisScript<Long> removeAdmittedUserScript;
 
     // === Key helpers ===
 
@@ -224,6 +225,16 @@ public class QueueRedisRepository {
         return Boolean.TRUE.equals(added);
     }
 
+    // === Queue Ownership Check ===
+
+    public Long getQueueOwnerUserId(String eventId, String queueKeyVal) {
+        Object value = redisTemplate.opsForHash().get(sessionKey(eventId, queueKeyVal), "userId");
+        if (value == null) {
+            return null;
+        }
+        return Long.parseLong(value.toString());
+    }
+
     // === Admission check (used by ReservationService) ===
 
     public boolean isAdmitted(String eventId, String queueKey) {
@@ -241,5 +252,24 @@ public class QueueRedisRepository {
     public long getAdmittedCount(String eventId) {
         Long size = redisTemplate.opsForZSet().zCard(admittedKey(eventId));
         return size != null ? size : 0;
+    }
+
+    // === Remove Admitted User (reservation cancellation) ===
+
+    public void removeAdmittedUser(String eventId, String userId) {
+        Long result = redisTemplate.execute(
+                removeAdmittedUserScript,
+                Arrays.asList(
+                        userIndexKey(eventId),
+                        admittedKey(eventId),
+                        sessionKeyPrefix(eventId)
+                ),
+                userId
+        );
+        if (result == null) {
+            log.error("Redis script returned null: removeAdmittedUserScript, eventId={}, userId={}", eventId, userId);
+            throw new IllegalStateException("Redis script returned null: removeAdmittedUserScript");
+            }
+        log.info("removeAdmittedUser: eventId={}, userId={}, removed={}", eventId, userId, result);
     }
 }

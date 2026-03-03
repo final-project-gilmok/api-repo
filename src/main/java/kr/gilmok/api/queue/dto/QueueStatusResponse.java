@@ -12,4 +12,5 @@ public class QueueStatusResponse {
     private final long total;
     private final long etaSeconds;
     private final long pollAfterMs;
+    private final String admissionToken;
 }

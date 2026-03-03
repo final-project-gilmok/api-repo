@@ -5,6 +5,7 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
+import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.exception.CustomException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -29,6 +30,8 @@ import static org.mockito.Mockito.*;
 class QueueServiceTest {
 
     @Mock
+    private TokenService tokenService;
+    @Mock
     private QueueRedisRepository queueRedisRepository;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -40,7 +43,7 @@ class QueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        queueService = new QueueService(queueRedisRepository, meterRegistry);
+        queueService = new QueueService(tokenService, queueRedisRepository, meterRegistry);
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
@@ -99,34 +102,40 @@ class QueueServiceTest {
     }
 
     @Test
-    @DisplayName("등록 - 이미 admitted 상태면 예외를 던진다")
-    void register_alreadyAdmitted_throwsException() {
+    @DisplayName("등록 - 이미 admitted 상태면 기존 queueKey를 position=0으로 반환한다")
+    void register_alreadyAdmitted_returnsExistingQueueKey() {
         // given
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
                 eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
         )).willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
 
-        // when & then
-        assertThatThrownBy(() -> queueService.register(USER_ID, request))
-                .isInstanceOf(CustomException.class);
+        // when
+        QueueRegisterResponse response = queueService.register(USER_ID, request);
+
+        // then
+        assertThat(response.getQueueKey()).isEqualTo("admitted-queue-key");
+        assertThat(response.getPosition()).isEqualTo(0);
+        assertThat(response.getEtaSeconds()).isEqualTo(0);
     }
 
     // === getStatus 테스트 ===
 
     @Test
-    @DisplayName("상태 조회 - admitted 상태면 ADMITTABLE을 반환한다")
+    @DisplayName("상태 조회 - admitted 상태면 ADMITTABLE과 admissionToken을 반환한다")
     void getStatus_admitted_returnsAdmittable() {
         // given — statusCode=1
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(1L, -1L, 0L, 0L));
+        given(tokenService.issueAdmissionToken(eq("event1"), eq(USER_ID), eq("testuser"), eq(0L)))
+                .willReturn("test-admission-token");
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getStatus()).isEqualTo(QueueStatus.ADMITTABLE);
-        assertThat(response.getPosition()).isEqualTo(0);
+        assertThat(response.getAdmissionToken()).isEqualTo("test-admission-token");
         assertThat(response.getPollAfterMs()).isEqualTo(0);
     }
 
@@ -138,7 +147,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 4L, 100L, 20L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getStatus()).isEqualTo(QueueStatus.WAITING);
@@ -154,7 +163,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(3L, -1L, 0L, 0L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getStatus()).isEqualTo(QueueStatus.EXPIRED);
@@ -172,7 +181,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 1499L, 2000L, 0L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getPollAfterMs()).isEqualTo(5000);
@@ -186,7 +195,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 499L, 1000L, 0L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getPollAfterMs()).isEqualTo(3000);
@@ -200,7 +209,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 9L, 50L, 0L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getPollAfterMs()).isEqualTo(1000);
@@ -216,7 +225,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 99L, 200L, 60L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then — 100 / (60/60) = 100초
         assertThat(response.getEtaSeconds()).isEqualTo(100);
@@ -230,7 +239,7 @@ class QueueServiceTest {
                 .willReturn(Arrays.asList(2L, 99L, 200L, 0L));
 
         // when
-        QueueStatusResponse response = queueService.getStatus("event1", "queue1");
+        QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then — 100 / 10 = 10초
         assertThat(response.getEtaSeconds()).isEqualTo(10);

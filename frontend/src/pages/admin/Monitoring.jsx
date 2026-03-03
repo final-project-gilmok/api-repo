@@ -1,95 +1,147 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom'; // 라우터 훅 추가
-import { fetchRecentLogs } from '../../api/logs.js'; // 방금 만든 API 함수 가져오기
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { fetchRecentLogs } from '../../api/logs.js'
 
-const Monitoring = () => {
-    const [logs, setLogs] = useState([]);
-    const navigate = useNavigate();
-    const { eventId } = useParams(); // URL에서 eventId 가져오기
-    const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || '';
+export default function Monitoring() {
+  const [logs, setLogs] = useState([])
+  const navigate = useNavigate()
+  const { eventId } = useParams()
+  const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || ''
 
-    useEffect(() => {
-        const getLogs = async () => {
-            try {
-                const data = await fetchRecentLogs();
-                // ✅ 리뷰 반영: 최후의 방어선으로 한 번 더 빈 배열 보장
-                setLogs(data || []);
-            } catch (error) {
-                console.error('로그 조회 실패:', error);
-            }
-        };
+  useEffect(() => {
+    const getLogs = async () => {
+      try {
+        const data = await fetchRecentLogs()
+        setLogs(data || [])
+      } catch (error) {
+        console.error('로그 조회 실패:', error)
+      }
+    }
 
-        getLogs(); // 처음 페이지 열 때 1번 호출
+    getLogs()
+    const interval = setInterval(getLogs, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
-        // 5초마다 데이터 새로고침
-        const interval = setInterval(getLogs, 5000);
-        return () => clearInterval(interval);
-    }, []);
-
-    return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-            {/* ⭐️ 상단 타이틀 및 AI 추천 버튼 영역 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h1>🚦 실시간 트래픽 관제 대시보드</h1>
-                {/* eventId가 있을 때만 AI 추천 버튼 표시 */}
-                {eventId && (
-                    <button
-                        onClick={() => navigate(`/admin/events/${eventId}/ai-recommendation`)}
-                        style={{ padding: '10px 20px', backgroundColor: '#0d6efd', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-                    >
-                        🤖 AI 트래픽 분석 및 정책 추천
-                    </button>
-                )}
-            </div>
-
-            {/* 상단: 그라파나 대시보드 (Iframe) */}
-            <section style={{ marginBottom: '40px' }}>
-                <h2>📊 시스템 메트릭 (Grafana)</h2>
-                <div style={{ border: '1px solid #ccc', borderRadius: '8px', overflow: 'hidden' }}>
-                    <iframe
-                        src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
-                        width="100%"
-                        height="500px"
-                        frameBorder="0"
-                        title="Grafana Dashboard"
-                    ></iframe>
-                </div>
-            </section>
-
-            {/* 하단: 실시간 API 요청 로그 */}
-            <section>
-                <h2>📝 최신 API 요청 로그 (Top 100)</h2>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead style={{ backgroundColor: '#f8f9fa' }}>
-                        <tr>
-                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>요청 시간</th>
-                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>메서드</th>
-                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>경로 (Path)</th>
-                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>상태 코드</th>
-                            <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>처리 시간</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {logs.map((log) => (
-                            <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
-                                <td style={{ padding: '12px' }}>{new Date(log.timestamp).toLocaleString()}</td>
-                                <td style={{ padding: '12px', fontWeight: 'bold', color: log.method === 'GET' ? 'blue' : 'green' }}>
-                                    {log.method}
-                                </td>
-                                <td style={{ padding: '12px' }}>{log.path}</td>
-                                <td style={{ padding: '12px', color: log.status >= 400 ? 'red' : '#28a745', fontWeight: 'bold' }}>
-                                    {log.status}
-                                </td>
-                                <td style={{ padding: '12px' }}>{log.latencyMs} ms</td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+  return (
+    <div className="d-flex flex-column gap-4">
+      {/* 상단 헤더 영역 */}
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h1 className="h3 fw-bold mb-1">모니터링</h1>
+          <p className="text-muted small mb-0">
+            시스템 메트릭과 최근 API 요청 로그를 한눈에 확인합니다.
+          </p>
         </div>
-    );
-};
+        {eventId && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => navigate(`/admin/events/${eventId}/ai-recommendation`)}
+          >
+            AI 트래픽 분석 및 정책 추천
+          </button>
+        )}
+      </div>
 
-export default Monitoring;
+      {/* Grafana 메트릭 카드 */}
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 className="h5 fw-semibold mb-1">시스템 메트릭 (Grafana)</h2>
+              <p className="text-muted small mb-0">
+                주요 트래픽, 에러율, 지연 시간 등을 실시간으로 모니터링합니다.
+              </p>
+            </div>
+          </div>
+          <div className="border rounded overflow-hidden">
+            {GRAFANA_BASE_URL ? (
+              <iframe
+                src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
+                width="100%"
+                height="480"
+                frameBorder="0"
+                title="Grafana Dashboard"
+              />
+            ) : (
+              <div className="text-center text-muted py-5">
+                Grafana URL이 설정되지 않았습니다. VITE_GRAFANA_URL 환경 변수를 설정하면 대시보드를 볼 수 있습니다.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 최근 API 로그 카드 */}
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 className="h5 fw-semibold mb-1">최신 API 요청 로그 (Top 100)</h2>
+              <p className="text-muted small mb-0">
+                최근 수집된 API 요청 이력입니다. 상태 코드와 응답 시간을 함께 확인할 수 있습니다.
+              </p>
+            </div>
+          </div>
+          <div className="table-responsive">
+            <table className="table table-hover align-middle">
+              <thead className="table-light">
+                <tr>
+                  <th>요청 시간</th>
+                  <th>메서드</th>
+                  <th>경로 (Path)</th>
+                  <th>상태 코드</th>
+                  <th>처리 시간</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="small">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="fw-semibold">
+                      <span
+                        className={`badge text-bg-${
+                          log.method === 'GET'
+                            ? 'primary'
+                            : log.method === 'POST'
+                              ? 'success'
+                              : 'secondary'
+                        }`}
+                      >
+                        {log.method}
+                      </span>
+                    </td>
+                    <td className="small font-monospace">{log.path}</td>
+                    <td>
+                      <span
+                        className={`badge fw-semibold text-bg-${
+                          log.status >= 500
+                            ? 'danger'
+                            : log.status >= 400
+                              ? 'warning'
+                              : 'success'
+                        }`}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="small">{log.latencyMs} ms</td>
+                  </tr>
+                ))}
+                {logs.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center text-muted py-4 small">
+                      표시할 로그가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+

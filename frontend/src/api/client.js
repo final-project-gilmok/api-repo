@@ -18,8 +18,13 @@ async function request(baseUrl, path, options = {}) {
   // 첫 번째 원본 API 요청
   let res = await fetch(url, { ...options, headers });
 
-  // 2. 응답 후: 401 에러(토큰 만료) 시 자동 갱신 로직 실행
+  // 2. 응답 후: 401 에러(토큰 만료) 시 자동 갱신 로직 실행 (skipAuthRedirect 시 리다이렉트 없이 throw)
   if (res.status === 401 && !path.includes('/auth/reissue')) {
+    if (options.skipAuthRedirect) {
+      const err = new Error('인증이 필요합니다.');
+      err.status = 401;
+      throw err;
+    }
     const refreshToken = localStorage.getItem('refreshToken');
 
     if (refreshToken) {
@@ -59,14 +64,19 @@ async function request(baseUrl, path, options = {}) {
           throw new Error('Refresh Token expired');
         }
       } catch (err) {
-        // 재발급 실패 시 강제 로그아웃
-        localStorage.clear();
+        // 재발급 실패 시 auth 키만 제거 후 로그인으로
+        const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
+        authKeys.forEach((k) => {
+          localStorage.removeItem(k);
+        });
         window.location.href = '/auth/login';
         throw err;
       }
     } else {
-      // RT가 없으면 바로 강제 로그아웃
-      localStorage.clear();
+      const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
+      authKeys.forEach((k) => {
+        localStorage.removeItem(k);
+      });
       window.location.href = '/auth/login';
       throw new Error('No refresh token available');
     }
@@ -88,10 +98,10 @@ async function request(baseUrl, path, options = {}) {
 }
 
 export const api = {
-  get: (path, headers) => request(API_BASE, path, { method: 'GET', headers }),
-  post: (path, body) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined }),
-  put: (path, body) => request(API_BASE, path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: (path) => request(API_BASE, path, { method: 'DELETE' }),
+  get: (path, headers, opts) => request(API_BASE, path, { method: 'GET', headers, ...opts }),
+  post: (path, body, opts) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined, ...opts }),
+  put: (path, body, opts) => request(API_BASE, path, { method: 'PUT', body: JSON.stringify(body), ...opts }),
+  delete: (path, opts) => request(API_BASE, path, { method: 'DELETE', ...opts }),
 }
 
 export const authApi = {
