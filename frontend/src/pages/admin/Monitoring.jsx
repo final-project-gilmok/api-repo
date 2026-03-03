@@ -6,7 +6,8 @@ export default function Monitoring() {
   const [logs, setLogs] = useState([])
   const navigate = useNavigate()
   const { eventId } = useParams()
-  const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || ''
+  const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_BASE_URL || ''
+  const DASH_UID = import.meta.env.VITE_GRAFANA_DASHBOARD_UID || '';
 
   useEffect(() => {
     const getLogs = async () => {
@@ -56,18 +57,18 @@ export default function Monitoring() {
             </div>
           </div>
           <div className="border rounded overflow-hidden">
-            {GRAFANA_BASE_URL ? (
-              <iframe
-                src={`${GRAFANA_BASE_URL}/goto/dfe6s8njprw1sa?orgId=1&kiosk`}
-                width="100%"
-                height="480"
-                frameBorder="0"
-                title="Grafana Dashboard"
-              />
+            {GRAFANA_BASE_URL&& DASH_UID ? (
+                <iframe
+                    src={`${GRAFANA_BASE_URL}/d/${DASH_UID}/jvm-micrometer?orgId=1&kiosk&refresh=30s`}
+                    width="100%"
+                    height="480"
+                    frameBorder="0"
+                    title="Grafana Dashboard"
+                />
             ) : (
-              <div className="text-center text-muted py-5">
-                Grafana URL이 설정되지 않았습니다. VITE_GRAFANA_URL 환경 변수를 설정하면 대시보드를 볼 수 있습니다.
-              </div>
+                <div className="text-center text-muted py-5">
+                  Grafana URL/UID가 설정되지 않았습니다.
+                </div>
             )}
           </div>
         </div>
