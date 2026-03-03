@@ -34,6 +34,7 @@ local function upsertSession(qk, state)
 
   -- preserve immutable-ish fields
   redis.call('HSETNX', sessKey, 'eventId', eventIdVal)
+  redis.call('HSETNX', sessKey, 'userId', userId)
   redis.call('HSETNX', sessKey, 'createdAt', nowMs)
 
   -- update mutable fields
