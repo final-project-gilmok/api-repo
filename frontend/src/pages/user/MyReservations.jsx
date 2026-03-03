@@ -18,13 +18,22 @@ export default function MyReservations() {
   const [reservations, setReservations] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const userId = sessionStorage.getItem('userId') || '1'
+  const userId = sessionStorage.getItem('userId')
 
   useEffect(() => {
+    if (!userId) {
+      setReservations([])
+      setLoading(false)
+      return
+    }
     fetch(`${API_BASE}/reservations/my`, {
       headers: { 'X-User-Id': userId },
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.message || '예약 목록 조회 실패')
+        return data
+      })
       .then((data) => setReservations(data.data || []))
       .catch(() => setReservations([]))
       .finally(() => setLoading(false))
@@ -37,18 +46,23 @@ export default function MyReservations() {
       method: 'DELETE',
       headers: { 'X-User-Id': userId },
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.message || '취소 실패')
+        return data
+      })
       .then((data) => {
-          if (data.status === 'error') {
-              alert(data.message || '취소에 실패했습니다.')
-              return }
+        if (data.status === 'error') {
+          alert(data.message || '취소에 실패했습니다.')
+          return
+        }
         if (data.data) {
           setReservations((prev) =>
             prev.map((r) => (r.reservationCode === code ? data.data : r))
           )
         }
       })
-        .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
+      .catch(() => alert('취소 요청 중 오류가 발생했습니다.'))
   }
 
   if (loading) {
