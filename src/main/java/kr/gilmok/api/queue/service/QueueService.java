@@ -101,6 +101,12 @@ public class QueueService {
     // === 2. 대기열 상태 조회 — 1 Redis 호출 ===
 
     public QueueStatusResponse getStatus(String eventId, String queueKey, String username, long userId) {
+        Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
+        if (ownerUserId == null || !ownerUserId.equals(userId)) {
+            log.warn("Queue ownership mismatch: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
+            return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0, null);
+            }
+
         List<Long> r = queueRedisRepository.getStatusAtomic(eventId, queueKey, ETA_WINDOW_SECONDS);
 
         if (r.size() < 4) {

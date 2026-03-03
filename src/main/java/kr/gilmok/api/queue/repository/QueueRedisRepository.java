@@ -225,6 +225,16 @@ public class QueueRedisRepository {
         return Boolean.TRUE.equals(added);
     }
 
+    // === Queue Ownership Check ===
+
+    public Long getQueueOwnerUserId(String eventId, String queueKeyVal) {
+        Object value = redisTemplate.opsForHash().get(sessionKey(eventId, queueKeyVal), "userId");
+        if (value == null) {
+            return null;
+        }
+        return Long.parseLong(value.toString());
+    }
+
     // === Admission check (used by ReservationService) ===
 
     public boolean isAdmitted(String eventId, String queueKey) {
@@ -256,6 +266,10 @@ public class QueueRedisRepository {
                 ),
                 userId
         );
+        if (result == null) {
+            log.error("Redis script returned null: removeAdmittedUserScript, eventId={}, userId={}", eventId, userId);
+            throw new IllegalStateException("Redis script returned null: removeAdmittedUserScript");
+            }
         log.info("removeAdmittedUser: eventId={}, userId={}, removed={}", eventId, userId, result);
     }
 }
