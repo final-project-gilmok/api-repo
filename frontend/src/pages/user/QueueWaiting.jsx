@@ -89,7 +89,10 @@ export default function QueueWaiting() {
         if (d.pollAfterMs > 0) pollIntervalRef.current = d.pollAfterMs
 
         if (d.status === 'ADMITTABLE') {
-          navigate(`/events/${eventId}/seats`, { state: { queueKey } })
+            if(d.admissionToken) {
+                sessionStorage.setItem(`admissionToken_${eventId}`, d.admissionToken);
+            }
+          navigate(`/events/${eventId}/seats`, { state: { queueKey, admissionToken: d.admissionToken} })
         }
       })
   }, [queueKey, eventId, navigate])
