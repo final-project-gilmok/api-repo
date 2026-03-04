@@ -6,8 +6,11 @@ export default function Monitoring() {
   const [logs, setLogs] = useState([])
   const navigate = useNavigate()
   const { eventId } = useParams()
-  const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_BASE_URL || ''
-  const DASH_UID = import.meta.env.VITE_GRAFANA_DASHBOARD_UID || '';
+  const GRAFANA_BASE_URL = (import.meta.env.VITE_GRAFANA_BASE_URL || '')
+      .trim()
+      .replace(/\/+$/, '')
+
+  const DASH_UID = (import.meta.env.VITE_GRAFANA_DASHBOARD_UID || '').trim()
 
   useEffect(() => {
     const getLogs = async () => {
