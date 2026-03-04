@@ -51,7 +51,15 @@ export default function ReservationConfirm() {
     setConfirming(true)
     setError(null)
 
-    api.post(`/reservations/${reservation.reservationCode}/confirm`)
+    const admissionToken = sessionStorage.getItem(`admissionToken_${eventId}`);
+
+    if (!admissionToken) {
+      setError('입장 권한이 없거나 만료되었습니다. 대기열을 다시 거쳐주세요.');
+      setConfirming(false);
+      return;
+    }
+
+    api.post(`/reservations/${reservation.reservationCode}/confirm`, {}, { headers: { 'X-Admission-Token': admissionToken } })
       .then((d) => {
         navigate(`/reservations/${reservation.reservationCode}`, {
           state: { reservation: d },
