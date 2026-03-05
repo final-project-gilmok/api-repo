@@ -5,10 +5,10 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# ✅ nginx:alpine → nginxinc/nginx-unprivileged:alpine 으로 변경
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:1.27-alpine   # ← 버전 고정 (권장)
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# ✅ 80 → 8080 으로 변경 (비권한 포트)
+USER 101:101                                    # ← 추가
 EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]
+
