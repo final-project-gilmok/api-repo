@@ -5,10 +5,10 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine   # ← 버전 고정 (권장)
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-USER 101:101                                    # ← 추가
+USER 101:101
 EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]
 
