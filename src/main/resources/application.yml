@@ -18,10 +18,6 @@ reservation:
   seat-lock-ttl-seconds: 300
   max-quantity: 4
 
-logging:
-  level:
-    org.springframework.security: DEBUG
-
 management:
   tracing:
     sampling:
