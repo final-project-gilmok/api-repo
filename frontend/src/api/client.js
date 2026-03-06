@@ -140,10 +140,15 @@ export const api = {
  * 인증 전용 API 클라이언트
  */
 export const authApi = {
-    get: (path) => request(AUTH_BASE, path, { method: 'GET' }),
-    post: (path, body) => request(AUTH_BASE, path, {
+    get: (path, opts) => request(AUTH_BASE, path, { method: 'GET', ...opts }),
+    post: (path, body, opts) => request(AUTH_BASE, path, {
         method: 'POST',
-        body: body !== undefined ? JSON.stringify(body) : undefined
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        ...opts
     }),
-    put: (path, body) => request(AUTH_BASE, path, { method: 'PUT', body: JSON.stringify(body) }),
+    put: (path, body, opts) => request(AUTH_BASE, path, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+        ...opts
+    }),
 }
