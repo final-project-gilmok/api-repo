@@ -14,7 +14,8 @@ public record PolicyCacheDto(
         long policyVersion,
         BlockRules blockRules,
         int maxRequestsPerSecond,
-        int blockDurationMinutes
+        int blockDurationMinutes,
+        String gateMode
 ) {
     public static PolicyCacheDto from(Policy policy) {
         return new PolicyCacheDto(
@@ -26,7 +27,8 @@ public record PolicyCacheDto(
                 policy.getPolicyVersion(),
                 policy.getBlockRules(),
                 policy.getMaxRequestsPerSecond(),
-                policy.getBlockDurationMinutes()
+                policy.getBlockDurationMinutes(),
+                policy.getGateMode()
         );
     }
 
@@ -41,7 +43,8 @@ public record PolicyCacheDto(
                 0L,
                 BlockRules.empty(),
                 0,
-                10
+                10,
+                null
         );
     }
 }

@@ -8,6 +8,8 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.exception.QueueErrorCode;
+import kr.gilmok.api.policy.dto.PolicyCacheDto;
+import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.exception.CustomException;
@@ -30,6 +32,7 @@ public class QueueService {
 
     private final TokenService tokenService;
     private final QueueRedisRepository queueRedisRepository;
+    private final PolicyCacheRepository policyCacheRepository;
     private final MeterRegistry meterRegistry;
 
     private final Map<String, AtomicLong> waitingQueueSizes = new ConcurrentHashMap<>();
@@ -90,7 +93,8 @@ public class QueueService {
         }
 
         long position = rank + 1;
-        long etaSeconds = position / admissionRps;
+        int effectiveRps = resolveAdmissionRps(eventId);
+        long etaSeconds = position / effectiveRps;
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
                 eventId, maskUserId(userIdStr), queueKey, isNew, position);
@@ -138,13 +142,13 @@ public class QueueService {
 
     // === 3. 통합 입장 사이클 — 반환값 기반 메트릭 (Redis 추가 호출 최소화) ===
 
-    public void runAdmissionCycle(String eventId) {
+    public void runAdmissionCycle(String eventId, int rps, int maxConcurrency) {
         long admittedTtlMs = admittedTtlSeconds * 1000L;
         long graceMs = gracePeriodSeconds * 1000L;
 
         List<Object> result = queueRedisRepository.runAdmissionCycle(
-                eventId, admissionRps, admissionRps,
-                admittedTtlMs, graceMs, 100, 100
+                eventId, rps, rps,
+                admittedTtlMs, graceMs, 100, 100, maxConcurrency
         );
 
         long expiredCount = toLong(result.get(0));
@@ -203,6 +207,21 @@ public class QueueService {
                 .tag("eventId", eventId)
                 .register(meterRegistry);
         return gauge;
+    }
+
+    // === Policy Lookup ===
+
+    private int resolveAdmissionRps(String eventId) {
+        try {
+            long evId = Long.parseLong(eventId);
+            return policyCacheRepository.find(evId)
+                    .filter(PolicyCacheDto::exists)
+                    .map(PolicyCacheDto::admissionRps)
+                    .filter(rps -> rps > 0)
+                    .orElse(admissionRps);
+        } catch (Exception e) {
+            return admissionRps;
+        }
     }
 
     // === ETA Calculation ===

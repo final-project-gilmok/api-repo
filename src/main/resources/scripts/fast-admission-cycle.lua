@@ -11,6 +11,7 @@
 -- ARGV[5] = gracePeriodMs
 -- ARGV[6] = cleanupBatch
 -- ARGV[7] = expireBatch
+-- ARGV[8] = maxConcurrency (0 = unlimited)
 --
 -- Returns: {expiredCount, cleanedCount, admittedCount, tokensConsumed, tokensLeft,
 --           waitingSize, admittedSize, ...admittedMembers}
@@ -27,6 +28,7 @@ local admittedTtlMs = tonumber(ARGV[4]) or 0
 local graceMs = tonumber(ARGV[5]) or 0
 local cleanupBatch = tonumber(ARGV[6]) or 100
 local expireBatch = tonumber(ARGV[7]) or 100
+local maxConcurrency = tonumber(ARGV[8]) or 0
 
 -- Guards
 if now <= 0 then
@@ -105,6 +107,27 @@ if rate > 0 and capacity > 0 and requestedMax > 0 then
   tokensLeft = tokens
 
   redis.call('HSET', bucketKey, 'tokens', tokens, 'lastRefillMs', lastRefillMs)
+end
+
+-- ------------------------------------------------------------
+-- 3.5) Concurrency limit: cap canAdmit by headroom
+-- ------------------------------------------------------------
+if maxConcurrency > 0 and canAdmit > 0 then
+  local currentAdmitted = redis.call('ZCARD', admittedKey)
+  local headroom = maxConcurrency - currentAdmitted
+  if headroom < 0 then headroom = 0 end
+  if canAdmit > headroom then
+    -- return excess tokens
+    local excess = canAdmit - headroom
+    if excess > 0 and rate > 0 and capacity > 0 then
+      local t = tokensLeft + excess
+      if t > capacity then t = capacity end
+      tokensLeft = t
+      tokensConsumed = headroom
+      redis.call('HSET', bucketKey, 'tokens', t)
+    end
+    canAdmit = headroom
+  end
 end
 
 -- ------------------------------------------------------------

@@ -4,6 +4,7 @@ import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
+import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.exception.CustomException;
@@ -33,6 +34,8 @@ class QueueServiceTest {
     private TokenService tokenService;
     @Mock
     private QueueRedisRepository queueRedisRepository;
+    @Mock
+    private PolicyCacheRepository policyCacheRepository;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -43,7 +46,7 @@ class QueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        queueService = new QueueService(tokenService, queueRedisRepository, meterRegistry);
+        queueService = new QueueService(tokenService, queueRedisRepository, policyCacheRepository, meterRegistry);
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
@@ -253,11 +256,11 @@ class QueueServiceTest {
         // given — 결과: expired=2, cleaned=1, admitted=3, consumed=3, left=7, waiting=5, admittedSize=3, members
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100)
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
         )).willReturn(Arrays.asList(2L, 1L, 3L, 3L, 7L, 5L, 3L, "m1", "m2", "m3"));
 
         // when
-        queueService.runAdmissionCycle("event1");
+        queueService.runAdmissionCycle("event1", 10, 0);
 
         // then
         verify(queueRedisRepository).recordAdmissionRate(eq("event1"), eq(3L), anyLong());
@@ -270,11 +273,11 @@ class QueueServiceTest {
         // given — 모두 0
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100)
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
         )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 5L, 0L));
 
         // when
-        queueService.runAdmissionCycle("event1");
+        queueService.runAdmissionCycle("event1", 10, 0);
 
         // then
         verify(queueRedisRepository, never()).recordAdmissionRate(anyString(), anyLong(), anyLong());
@@ -287,11 +290,11 @@ class QueueServiceTest {
         // given
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100)
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
         )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 42L, 7L));
 
         // when
-        queueService.runAdmissionCycle("event1");
+        queueService.runAdmissionCycle("event1", 10, 0);
 
         // then — getQueueSize/getAdmittedCount 호출 없어야 함 (반환값 사용)
         verify(queueRedisRepository, never()).getQueueSize("event1");

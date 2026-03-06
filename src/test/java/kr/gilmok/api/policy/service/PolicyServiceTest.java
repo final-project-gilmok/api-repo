@@ -61,7 +61,7 @@ class PolicyServiceTest {
         @DisplayName("캐시에 있으면 Redis에서 반환하고 DB는 조회하지 않는다")
         void getPolicyByEventId_cacheHit_returnsFromRedis() {
             Long eventId = 1L;
-            PolicyCacheDto cached = new PolicyCacheDto(true, eventId, 10, 5, 300L, 2L, BlockRules.empty(), 20, 10);
+            PolicyCacheDto cached = new PolicyCacheDto(true, eventId, 10, 5, 300L, 2L, BlockRules.empty(), 20, 10, "ROUTING_ENABLED");
             when(policyCacheRepository.find(eventId)).thenReturn(Optional.of(cached));
 
             PolicyResponse response = policyService.getPolicyByEventId(eventId);

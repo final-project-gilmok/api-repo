@@ -11,7 +11,8 @@ public record PolicyResponse(
         long policyVersion,
         BlockRules blockRules,
         int maxRequestsPerSecond,
-        int blockDurationMinutes
+        int blockDurationMinutes,
+        String gateMode
 ) {
     public static PolicyResponse from(Policy policy) {
         return new PolicyResponse(
@@ -22,7 +23,8 @@ public record PolicyResponse(
                 policy.getPolicyVersion(),
                 policy.getBlockRules(),
                 policy.getMaxRequestsPerSecond(),
-                policy.getBlockDurationMinutes()
+                policy.getBlockDurationMinutes(),
+                policy.getGateMode()
         );
     }
 
@@ -35,7 +37,8 @@ public record PolicyResponse(
                 dto.policyVersion(),
                 dto.blockRules(),
                 dto.maxRequestsPerSecond(),
-                dto.blockDurationMinutes()
+                dto.blockDurationMinutes(),
+                dto.gateMode()
         );
     }
 }
