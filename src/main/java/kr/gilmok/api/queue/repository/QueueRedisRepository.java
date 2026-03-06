@@ -170,7 +170,8 @@ public class QueueRedisRepository {
 
     public List<Object> runAdmissionCycle(String eventId, long rate, long capacity,
                                           long admittedTtlMs, long graceMs,
-                                          int cleanupBatch, int expireBatch) {
+                                          int cleanupBatch, int expireBatch,
+                                          int maxConcurrency) {
         List<Object> result = redisTemplate.execute(
                 fastAdmissionCycleScript,
                 Arrays.asList(queueKey(eventId), admittedKey(eventId), heartbeatsKey(eventId), tokenBucketKey(eventId)),
@@ -180,7 +181,8 @@ public class QueueRedisRepository {
                 String.valueOf(admittedTtlMs),
                 String.valueOf(graceMs),
                 String.valueOf(cleanupBatch),
-                String.valueOf(expireBatch)
+                String.valueOf(expireBatch),
+                String.valueOf(maxConcurrency)
         );
         if (result == null) {
             log.error("Redis script returned null: fastAdmissionCycleScript, eventId={}", eventId);
