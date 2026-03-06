@@ -9,7 +9,6 @@ import kr.gilmok.api.policy.vo.BlockRules;
 public record PolicyCreateRequest(
         @Min(0) Integer admissionRps,
         @Min(0) Integer admissionConcurrency,
-        @Min(0) Long tokenTtlSeconds,
         BlockRules blockRules,
         String gateMode,
         @Min(0) Integer maxRequestsPerSecond,

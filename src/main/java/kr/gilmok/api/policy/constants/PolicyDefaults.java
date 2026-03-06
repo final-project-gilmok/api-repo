@@ -10,9 +10,8 @@ public final class PolicyDefaults {
     private PolicyDefaults() {
     }
 
-    public static final int ADMISSION_RPS = 0;
-    public static final int ADMISSION_CONCURRENCY = 0;
-    public static final long TOKEN_TTL_SECONDS = 300L;
+    public static final int ADMISSION_RPS = 100;
+    public static final int ADMISSION_CONCURRENCY = 50;
     public static final int MAX_REQUESTS_PER_SECOND = 100;
     public static final int BLOCK_DURATION_MINUTES = 10;
     public static final String GATE_MODE = "ROUTING_ENABLED";

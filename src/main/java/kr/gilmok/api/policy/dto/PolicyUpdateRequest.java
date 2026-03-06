@@ -6,7 +6,6 @@ import kr.gilmok.api.policy.vo.BlockRules;
 public record PolicyUpdateRequest(
         @Min(0) int admissionRps,
         @Min(0) int admissionConcurrency,
-        @Min(0) long tokenTtlSeconds,
         BlockRules blockRules,
         // 게이트 모드(null이면 기존값 유지)
         String gateMode,
@@ -15,7 +14,7 @@ public record PolicyUpdateRequest(
         // 매크로 방어: 초과 시 차단 시간(분). null이면 기존값 유지.
         @Min(0) Integer blockDurationMinutes
 ) {
-    public PolicyUpdateRequest(int admissionRps, int admissionConcurrency, long tokenTtlSeconds, BlockRules blockRules) {
-        this(admissionRps, admissionConcurrency, tokenTtlSeconds, blockRules, null, null, null);
+    public PolicyUpdateRequest(int admissionRps, int admissionConcurrency, BlockRules blockRules) {
+        this(admissionRps, admissionConcurrency, blockRules, null, null, null);
     }
 }

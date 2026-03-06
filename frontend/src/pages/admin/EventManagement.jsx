@@ -5,20 +5,18 @@ import { getEvents, createEvent } from '../../api/events.js'
 const statusLabel = { OPEN: 'OPEN', DRAFT: 'DRAFT', CLOSED: 'CLOSED' }
 const statusClass = { OPEN: 'open', DRAFT: 'draft', CLOSED: 'closed' }
 
-// TODO: api-repo policy/constants/PolicyDefaults.java 와 값 동기화 필요.
+// PolicyDefaults.java (api-repo) 와 동기화
 const POLICY_DEFAULT_LABEL = {
   admissionRps: 'Admission RPS',
   admissionConcurrency: 'Admission Concurrency',
-  tokenTtlSeconds: 'Token TTL (초)',
   maxRequestsPerSecond: 'Max RPS',
   blockDurationMinutes: 'Block Duration (분)',
   gateMode: 'Gate Mode',
   blockRules: 'Block Rules',
 }
 const POLICY_DEFAULT_VALUES = {
-  admissionRps: 0,
-  admissionConcurrency: 0,
-  tokenTtlSeconds: 300,
+  admissionRps: 100,
+  admissionConcurrency: 50,
   maxRequestsPerSecond: 100,
   blockDurationMinutes: 10,
   gateMode: 'ROUTING_ENABLED',

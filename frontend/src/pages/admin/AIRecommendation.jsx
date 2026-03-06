@@ -49,7 +49,7 @@ export default function AIRecommendation() {
 
       const updateRequest = {
         admissionRps: aiData.recommendedAdmissionRps,
-        tokenTtlSeconds: aiData.recommendedTokenTtlSeconds,
+        admissionConcurrency: aiData.recommendedAdmissionConcurrency ?? 5,
         blockRules,
       }
 
@@ -137,14 +137,6 @@ export default function AIRecommendation() {
                       <p className="text-muted small mb-1">권장 입장 허용량 (admissionRps)</p>
                       <p className="fw-bold mb-0 fs-4 text-primary">
                         {aiData.recommendedAdmissionRps} RPS
-                      </p>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="p-3 bg-light rounded border-start border-success border-4">
-                      <p className="text-muted small mb-1">권장 토큰 만료시간 (tokenTtl)</p>
-                      <p className="fw-bold mb-0 fs-4 text-success">
-                        {aiData.recommendedTokenTtlSeconds} 초
                       </p>
                     </div>
                   </div>

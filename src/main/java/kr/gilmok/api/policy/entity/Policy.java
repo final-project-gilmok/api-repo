@@ -27,7 +27,6 @@ public class Policy {
 
     private int admissionRps; // 초당 허용 수
     private int admissionConcurrency; // 동시 접속 수
-    private long tokenTtlSeconds; // 토큰 유효 시간
 
     @Version
     @Column(nullable = false)
@@ -58,16 +57,14 @@ public class Policy {
         this.policyVersion = 1L;
         this.admissionRps = PolicyDefaults.ADMISSION_RPS;
         this.admissionConcurrency = PolicyDefaults.ADMISSION_CONCURRENCY;
-        this.tokenTtlSeconds = PolicyDefaults.TOKEN_TTL_SECONDS;
         this.blockRules = PolicyDefaults.blockRules();
     }
 
-    public void updatePolicy(int rps, int concurrency, long ttl, BlockRules rules,
+    public void updatePolicy(int rps, int concurrency, BlockRules rules,
                             String gateMode, Long updatedByUserId,
                             Integer maxRequestsPerSecond, Integer blockDurationMinutes) {
         this.admissionRps = rps;
         this.admissionConcurrency = concurrency;
-        this.tokenTtlSeconds = ttl;
         this.blockRules = rules != null ? rules : BlockRules.empty();
         if (gateMode != null && !gateMode.isBlank()) {
             this.gateMode = gateMode;

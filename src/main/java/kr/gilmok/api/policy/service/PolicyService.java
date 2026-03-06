@@ -60,12 +60,11 @@ public class PolicyService {
         Policy policy = new Policy(eventId);
         int rps = request != null && request.admissionRps() != null ? request.admissionRps() : PolicyDefaults.ADMISSION_RPS;
         int concurrency = request != null && request.admissionConcurrency() != null ? request.admissionConcurrency() : PolicyDefaults.ADMISSION_CONCURRENCY;
-        long ttl = request != null && request.tokenTtlSeconds() != null ? request.tokenTtlSeconds() : PolicyDefaults.TOKEN_TTL_SECONDS;
         var blockRules = request != null && request.blockRules() != null ? request.blockRules() : PolicyDefaults.blockRules();
         String gateMode = request != null && request.gateMode() != null && !request.gateMode().isBlank() ? request.gateMode() : PolicyDefaults.GATE_MODE;
         Integer maxRps = request != null ? request.maxRequestsPerSecond() : null;
         Integer blockMin = request != null ? request.blockDurationMinutes() : null;
-        policy.updatePolicy(rps, concurrency, ttl, blockRules, gateMode, null, maxRps, blockMin);
+        policy.updatePolicy(rps, concurrency, blockRules, gateMode, null, maxRps, blockMin);
         policyRepository.saveAndFlush(policy);
         try {
             policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
@@ -100,7 +99,6 @@ public class PolicyService {
         policy.updatePolicy(
                 request.admissionRps(),
                 request.admissionConcurrency(),
-                request.tokenTtlSeconds(),
                 request.blockRules(),
                 request.gateMode(),
                 updatedByUserId,
