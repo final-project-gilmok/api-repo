@@ -136,7 +136,7 @@ class AdmissionSchedulerTest {
                 .willReturn(true);
 
         PolicyCacheDto disabledPolicy = new PolicyCacheDto(
-                true, 1L, 20, 500, 300L, 1L,
+                true, 1L, 20, 500, 1L,
                 BlockRules.empty(), 0, 10, "ROUTING_DISABLED");
         given(policyCacheRepository.find(1L)).willReturn(Optional.of(disabledPolicy));
 
@@ -160,7 +160,7 @@ class AdmissionSchedulerTest {
                 .willReturn(true);
 
         PolicyCacheDto policy = new PolicyCacheDto(
-                true, 1L, 20, 500, 300L, 1L,
+                true, 1L, 20, 500, 1L,
                 BlockRules.empty(), 0, 10, "ROUTING_ENABLED");
         given(policyCacheRepository.find(1L)).willReturn(Optional.of(policy));
 
