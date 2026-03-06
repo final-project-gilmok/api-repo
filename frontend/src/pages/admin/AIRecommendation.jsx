@@ -152,6 +152,18 @@ export default function AIRecommendation() {
                                             </p>
                                         </div>
                                     </div>
+                                    <div className="col-md-6">
+                                        <div className="p-3 bg-light rounded border-start border-success border-4">
+                                            <p className="text-muted small mb-1">
+                                                권장 동시 접속 수 (admissionConcurrency)
+                                            </p>
+                                            <p className="fw-bold mb-0 fs-4 text-success">
+                                                {aiData.recommendedAdmissionConcurrency != null
+                                                    ? aiData.recommendedAdmissionConcurrency
+                                                    : '기존 값 유지'}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="mt-4">
