@@ -7,6 +7,12 @@ const GATE_MODE_OPTIONS = [
   { value: 'ROUTING_DISABLED', label: '대기열 입장 비활성화' },
 ]
 
+const DEFAULT_GATE_MODE = 'ROUTING_ENABLED'
+
+function normalizeGateMode(value) {
+  return GATE_MODE_OPTIONS.some((opt) => opt.value === value) ? value : DEFAULT_GATE_MODE
+}
+
 function blockRulesToDisplay(blockRules) {
   if (!blockRules) return ''
   const { ipPattern, userAgentPattern } = blockRules
@@ -59,7 +65,7 @@ export default function PolicySettings() {
         if (data) {
           setAdmissionRps(String(data.admissionRps ?? 100))
           setAdmissionConcurrency(String(data.admissionConcurrency ?? 50))
-          setGateMode(data.gateMode && data.gateMode.trim() ? data.gateMode : 'ROUTING_ENABLED')
+          setGateMode(normalizeGateMode(data.gateMode?.trim()))
           setBlockingRules(blockRulesToDisplay(data.blockRules))
           setMaxRequestsPerSecond(String(data.maxRequestsPerSecond ?? 100))
           setBlockDurationMinutes(String(data.blockDurationMinutes ?? 10))
@@ -96,7 +102,7 @@ export default function PolicySettings() {
         admissionRps: rps,
         admissionConcurrency: concurrency,
         blockRules: displayToBlockRules(blockingRules),
-        gateMode: gateMode && gateMode.trim() ? gateMode : 'ROUTING_ENABLED',
+        gateMode: normalizeGateMode(gateMode?.trim()),
         maxRequestsPerSecond: Number.isNaN(maxRps) || maxRps < 0 ? null : maxRps,
         blockDurationMinutes: Number.isNaN(blockDur) || blockDur < 0 ? null : blockDur,
       })

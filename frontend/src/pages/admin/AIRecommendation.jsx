@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
+import { getPolicy } from '../../api/policy'
 
 const base = (eventId) => (eventId ? `/admin/events/${eventId}` : '/admin')
 
@@ -47,9 +48,20 @@ export default function AIRecommendation() {
                     }
                     : null
 
+            // AI가 동시 접속 수를 주지 않으면 기존 정책 값을 보존 (덮어쓰지 않음)
+            let admissionConcurrency = aiData.recommendedAdmissionConcurrency
+            if (admissionConcurrency === undefined || admissionConcurrency === null) {
+                try {
+                    const currentPolicy = await getPolicy(eventId)
+                    admissionConcurrency = currentPolicy?.admissionConcurrency ?? 50
+                } catch {
+                    admissionConcurrency = 50
+                }
+            }
+
             const updateRequest = {
                 admissionRps: aiData.recommendedAdmissionRps,
-                admissionConcurrency: aiData.recommendedAdmissionConcurrency ?? 50,
+                admissionConcurrency,
                 blockRules,
             }
 
