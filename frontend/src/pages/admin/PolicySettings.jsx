@@ -36,7 +36,7 @@ export default function PolicySettings() {
   const [noPolicyYet, setNoPolicyYet] = useState(false)
 
   const [admissionRps, setAdmissionRps] = useState('100')
-  const [admissionConcurrency, setAdmissionConcurrency] = useState('5')
+  const [admissionConcurrency, setAdmissionConcurrency] = useState('50')
   const [gateMode, setGateMode] = useState('ROUTING_ENABLED')
   const [blockingRules, setBlockingRules] = useState('')
   const [maxRequestsPerSecond, setMaxRequestsPerSecond] = useState('100')
@@ -49,7 +49,7 @@ export default function PolicySettings() {
     setNoPolicyYet(false)
     setPolicyVersion(null)
     setAdmissionRps('100')
-    setAdmissionConcurrency('5')
+    setAdmissionConcurrency('50')
     setGateMode('ROUTING_ENABLED')
     setBlockingRules('')
     setMaxRequestsPerSecond('100')
@@ -58,7 +58,7 @@ export default function PolicySettings() {
       .then((data) => {
         if (data) {
           setAdmissionRps(String(data.admissionRps ?? 100))
-          setAdmissionConcurrency(String(data.admissionConcurrency ?? 5))
+          setAdmissionConcurrency(String(data.admissionConcurrency ?? 50))
           setGateMode(data.gateMode && data.gateMode.trim() ? data.gateMode : 'ROUTING_ENABLED')
           setBlockingRules(blockRulesToDisplay(data.blockRules))
           setMaxRequestsPerSecond(String(data.maxRequestsPerSecond ?? 100))
