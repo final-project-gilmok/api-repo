@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useParams, NavLink } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { getPolicy, updatePolicy } from '../../api/policy.js'
 
-const tabs = [
-  { to: 'policy', label: '정책 설정' },
-  { to: 'monitoring', label: '모니터링 요약' },
-  { to: 'ai-recommendation', label: 'AI 추천' },
+const GATE_MODE_OPTIONS = [
+  { value: 'ROUTING_ENABLED', label: '대기열 입장 사용' },
+  { value: 'ROUTING_DISABLED', label: '대기열 입장 비활성화' },
 ]
+
+const DEFAULT_GATE_MODE = 'ROUTING_ENABLED'
+
+function normalizeGateMode(value) {
+  return GATE_MODE_OPTIONS.some((opt) => opt.value === value) ? value : DEFAULT_GATE_MODE
+}
 
 function blockRulesToDisplay(blockRules) {
   if (!blockRules) return ''
@@ -28,7 +33,6 @@ function displayToBlockRules(value) {
 
 export default function PolicySettings() {
   const { eventId } = useParams()
-  const base = `/admin/events/${eventId}`
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -38,9 +42,8 @@ export default function PolicySettings() {
   const [noPolicyYet, setNoPolicyYet] = useState(false)
 
   const [admissionRps, setAdmissionRps] = useState('100')
-  const [admissionConcurrency, setAdmissionConcurrency] = useState('5')
-  const [tokenTtl, setTokenTtl] = useState('3600')
-  const [useWaitingRoom, setUseWaitingRoom] = useState(true)
+  const [admissionConcurrency, setAdmissionConcurrency] = useState('50')
+  const [gateMode, setGateMode] = useState('ROUTING_ENABLED')
   const [blockingRules, setBlockingRules] = useState('')
   const [maxRequestsPerSecond, setMaxRequestsPerSecond] = useState('100')
   const [blockDurationMinutes, setBlockDurationMinutes] = useState('10')
@@ -52,8 +55,8 @@ export default function PolicySettings() {
     setNoPolicyYet(false)
     setPolicyVersion(null)
     setAdmissionRps('100')
-    setAdmissionConcurrency('5')
-    setTokenTtl('3600')
+    setAdmissionConcurrency('50')
+    setGateMode('ROUTING_ENABLED')
     setBlockingRules('')
     setMaxRequestsPerSecond('100')
     setBlockDurationMinutes('10')
@@ -61,8 +64,8 @@ export default function PolicySettings() {
       .then((data) => {
         if (data) {
           setAdmissionRps(String(data.admissionRps ?? 100))
-          setAdmissionConcurrency(String(data.admissionConcurrency ?? 5))
-          setTokenTtl(String(data.tokenTtlSeconds ?? 3600))
+          setAdmissionConcurrency(String(data.admissionConcurrency ?? 50))
+          setGateMode(normalizeGateMode(data.gateMode?.trim()))
           setBlockingRules(blockRulesToDisplay(data.blockRules))
           setMaxRequestsPerSecond(String(data.maxRequestsPerSecond ?? 100))
           setBlockDurationMinutes(String(data.blockDurationMinutes ?? 10))
@@ -89,19 +92,17 @@ export default function PolicySettings() {
     try {
       const rps = parseInt(admissionRps, 10)
       const concurrency = parseInt(admissionConcurrency, 10)
-      const ttl = parseInt(tokenTtl, 10)
       const maxRps = parseInt(maxRequestsPerSecond, 10)
       const blockDur = parseInt(blockDurationMinutes, 10)
-      if (Number.isNaN(rps) || rps < 0 || Number.isNaN(concurrency) || concurrency < 0 || Number.isNaN(ttl) || ttl < 0) {
-        setError('RPS, 동시 접속 수, TTL은 0 이상의 숫자여야 합니다.')
+      if (Number.isNaN(rps) || rps < 0 || Number.isNaN(concurrency) || concurrency < 0) {
+        setError('RPS, 동시 접속 수는 0 이상의 숫자여야 합니다.')
         return
       }
       const version = await updatePolicy(eventId, {
         admissionRps: rps,
         admissionConcurrency: concurrency,
-        tokenTtlSeconds: ttl,
         blockRules: displayToBlockRules(blockingRules),
-        gateMode: null,
+        gateMode: normalizeGateMode(gateMode?.trim()),
         maxRequestsPerSecond: Number.isNaN(maxRps) || maxRps < 0 ? null : maxRps,
         blockDurationMinutes: Number.isNaN(blockDur) || blockDur < 0 ? null : blockDur,
       })
@@ -117,15 +118,6 @@ export default function PolicySettings() {
   return (
     <>
       <h1 className="h3 mb-1 fw-bold">이벤트 상세: #{eventId}</h1>
-      <ul className="nav event-detail-tabs nav-tabs mb-4">
-        {tabs.map((tab) => (
-          <li key={tab.to} className="nav-item">
-            <NavLink className="nav-link" to={`${base}/${tab.to}`} end={tab.to === 'policy'}>
-              {tab.label}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
 
       <h2 className="h5 fw-semibold mb-1">정책 설정</h2>
       <p className="text-muted mb-4">이벤트의 트래픽 제어 정책을 구성합니다.</p>
@@ -180,31 +172,21 @@ export default function PolicySettings() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">토큰 TTL (초) <span className="text-danger">*</span></label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={tokenTtl}
-                  onChange={(e) => setTokenTtl(e.target.value)}
-                  min={0}
-                />
-                <p className="form-text small text-muted">발급된 토큰의 유효 시간 (초)입니다.</p>
-              </div>
-
-              <div className="mb-4">
-                <div className="form-check form-switch">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="useWaitingRoom"
-                    checked={useWaitingRoom}
-                    onChange={(e) => setUseWaitingRoom(e.target.checked)}
-                  />
-                  <label className="form-check-label" htmlFor="useWaitingRoom">
-                    대기열 사용 (Use Waiting Room)
-                  </label>
-                </div>
-                <p className="form-text small text-muted">트래픽 초과 시 대기열 기능을 활성화합니다. (UI 표시용)</p>
+                <label className="form-label">게이트 모드 (gateMode)</label>
+                <select
+                  className="form-select"
+                  value={gateMode}
+                  onChange={(e) => setGateMode(e.target.value)}
+                >
+                  {GATE_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="form-text small text-muted">
+                  ROUTING_ENABLED: 대기열 입장 허용. ROUTING_DISABLED: 해당 이벤트 대기열 입장을 스케줄러에서 건너뜁니다.
+                </p>
               </div>
 
               <h3 className="h6 fw-semibold mb-2">고급 정책 (선택)</h3>

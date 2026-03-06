@@ -26,7 +26,6 @@ public class PolicyHistory {
 
     private int admissionRps;
     private int admissionConcurrency;
-    private long tokenTtlSeconds;
 
     @Column(nullable = false)
     private long policyVersion; // 스냅샷 시점의 버전 번호
@@ -56,7 +55,6 @@ public class PolicyHistory {
                 .eventId(policy.getEventId())
                 .admissionRps(policy.getAdmissionRps())
                 .admissionConcurrency(policy.getAdmissionConcurrency())
-                .tokenTtlSeconds(policy.getTokenTtlSeconds())
                 .blockRules(policy.getBlockRules())
                 .policyVersion(policy.getPolicyVersion())
                 .maxRequestsPerSecond(policy.getMaxRequestsPerSecond())

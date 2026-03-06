@@ -61,7 +61,7 @@ class PolicyServiceTest {
         @DisplayName("캐시에 있으면 Redis에서 반환하고 DB는 조회하지 않는다")
         void getPolicyByEventId_cacheHit_returnsFromRedis() {
             Long eventId = 1L;
-            PolicyCacheDto cached = new PolicyCacheDto(true, eventId, 10, 5, 300L, 2L, BlockRules.empty(), 20, 10, "ROUTING_ENABLED");
+            PolicyCacheDto cached = new PolicyCacheDto(true, eventId, 10, 5, 2L, BlockRules.empty(), 20, 10, "ROUTING_ENABLED");
             when(policyCacheRepository.find(eventId)).thenReturn(Optional.of(cached));
 
             PolicyResponse response = policyService.getPolicyByEventId(eventId);
@@ -154,7 +154,7 @@ class PolicyServiceTest {
         @DisplayName("event가 없으면 EVENT_NOT_FOUND 예외가 발생한다")
         void updatePolicy_eventNotExists_throwsEventNotFound() {
             Long eventId = 999L;
-            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
+            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(false);
 
             assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
@@ -169,7 +169,7 @@ class PolicyServiceTest {
         void updatePolicy_noPolicy_createsAndReturnsVersion1() {
             Long eventId = 1L;
             Long updatedByUserId = 100L;
-            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
+            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -192,7 +192,7 @@ class PolicyServiceTest {
             Long eventId = 1L;
             Long updatedByUserId = 200L;
             Policy policy = new Policy(eventId);
-            PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, 600L, BlockRules.empty());
+            PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -212,7 +212,7 @@ class PolicyServiceTest {
         @DisplayName("updatedByUserId가 null이면 NullPointerException이 발생한다")
         void updatePolicy_nullUpdatedByUserId_throwsException() {
             Long eventId = 1L;
-            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, 300L, BlockRules.empty());
+            PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, BlockRules.empty());
 
             assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
                     .isInstanceOf(NullPointerException.class)
@@ -225,7 +225,7 @@ class PolicyServiceTest {
         void updatePolicy_optimisticLockConflict_throwsPolicyConflict() {
             Long eventId = 1L;
             Policy policy = new Policy(eventId);
-            PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, 600L, BlockRules.empty());
+            PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new OptimisticLockException());
