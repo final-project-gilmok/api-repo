@@ -83,7 +83,7 @@ export default function AIRecommendation() {
                     <div className="card-body text-center py-5">
                         <h2 className="h5 mb-3">현재 트래픽 상황에 대한 최적의 정책을 추천받아보세요</h2>
                         <p className="text-muted small mb-4">
-                            AI가 최근 메트릭과 로그를 기반으로 입장 허용량, 토큰 TTL, 차단 룰을 제안합니다.
+                            AI가 최근 메트릭과 로그를 기반으로 입장 허용량·동시 접속·차단 룰을 제안합니다.
                         </p>
                         <button
                             type="button"
