@@ -111,10 +111,9 @@ async function request(baseUrl, path, options = {}) {
                 onRefreshFailed(err); // 💡 대기 중인 요청들도 모두 에러 처리 (Pending 방지)
 
                 // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
-                const authKeys = ['isLoggedIn', 'username', 'role', 'userId'];
-                authKeys.forEach((k) => {
-                    localStorage.removeItem(k);
-                });
+                localStorage.removeItem('isLoggedIn')
+                localStorage.removeItem('username')
+                localStorage.removeItem('role')
                 window.location.href = '/auth/login';
                 throw err;
             }

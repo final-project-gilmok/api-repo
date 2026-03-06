@@ -64,7 +64,6 @@ export default function Login() {
             localStorage.setItem('isLoggedIn', 'true') // 로그인 상태 표시용 플래그
             localStorage.setItem('username', result.username)
             localStorage.setItem('role', result.role)
-            if (result.userId != null) localStorage.setItem('userId', String(result.userId))
 
             const role = (result.role || '').toString().toUpperCase()
             if (role.includes('ADMIN')) {

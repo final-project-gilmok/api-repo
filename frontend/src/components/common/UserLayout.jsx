@@ -28,6 +28,7 @@ export default function UserLayout() {
         localStorage.removeItem('isLoggedIn')
         localStorage.removeItem('username')
         localStorage.removeItem('role')
+        localStorage.removeItem('userId')
 
         setAuth({
             isLoggedIn: false,
