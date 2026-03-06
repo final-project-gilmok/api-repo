@@ -4,32 +4,31 @@ import { authService } from '../../api/auth'
 import Layout from '../../components/common/Layout'
 
 export function AdminRouteGuard() {
-    const location = useLocation()
-    const [allowed, setAllowed] = useState(null)
+  const location = useLocation()
+  const [allowed, setAllowed] = useState(null)
 
-    useEffect(() => {
-        // 토큰 대신 'isLoggedIn' 플래그로 로그인 여부를 확인
-        const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
-        const role = (localStorage.getItem('role') || '').toString().toUpperCase()
-        const isAdmin = role.includes('ADMIN')
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    const role = (localStorage.getItem('role') || '').toString().toUpperCase()
+    const isLoggedIn = !!accessToken
+    const isAdmin = role.includes('ADMIN')
+    setAllowed(isLoggedIn && isAdmin ? true : isLoggedIn ? 'no-role' : false)
+  }, [location.pathname])
 
-        setAllowed(isLoggedIn && isAdmin ? true : isLoggedIn ? 'no-role' : false)
-    }, [location.pathname])
-
-    if (allowed === null) {
-        return (
-            <div className="text-center py-5">
-                <div className="spinner-border" role="status" />
-            </div>
-        )
-    }
-    if (allowed === false) {
-        return <Navigate to="/auth/login" state={{ from: location }} replace />
-    }
-    if (allowed === 'no-role') {
-        return <Navigate to="/" replace />
-    }
-    return <Layout />
+  if (allowed === null) {
+    return (
+      <div className="text-center py-5">
+        <div className="spinner-border" role="status" />
+      </div>
+    )
+  }
+  if (allowed === false) {
+    return <Navigate to="/auth/login" state={{ from: location }} replace />
+  }
+  if (allowed === 'no-role') {
+    return <Navigate to="/" replace />
+  }
+  return <Layout />
 }
 
 export default function Login() {
@@ -53,15 +52,16 @@ export default function Login() {
 
         try {
             const data = await authService.login(formData)
-            const result = data.data || data
+            const result = data.data || data // Defensive: handle both wrapped and unwrapped
 
-            // 프론트엔드 라우팅과 UI 표시에 필요한 최소 정보만 검증
-            if (!result.username || !result.role) {
+            // 필수 필드 검증 및 예외 처리
+            if (!result.accessToken || !result.refreshToken || !result.username || !result.role) {
                 throw new Error('로그인 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.')
             }
 
-            // 브라우저가 알아서 HttpOnly 쿠키를 보관하고 다음 요청부터 전송
-            localStorage.setItem('isLoggedIn', 'true') // 로그인 상태 표시용 플래그
+            // Store tokens and user info
+            localStorage.setItem('accessToken', result.accessToken)
+            localStorage.setItem('refreshToken', result.refreshToken)
             localStorage.setItem('username', result.username)
             localStorage.setItem('role', result.role)
             if (result.userId != null) localStorage.setItem('userId', String(result.userId))

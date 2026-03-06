@@ -1,5 +1,5 @@
-import {Link, NavLink, Outlet, useLocation, useNavigate} from 'react-router-dom'
-import {useEffect, useState} from 'react'
+import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 
 export default function UserLayout() {
     const navigate = useNavigate()
@@ -11,21 +11,23 @@ export default function UserLayout() {
     })
 
     useEffect(() => {
-        const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+        const accessToken = localStorage.getItem('accessToken')
         const username = localStorage.getItem('username') || ''
         const role = localStorage.getItem('role') || ''
 
         setAuth({
-            isLoggedIn,
+            isLoggedIn: !!accessToken,
             username,
             role,
         })
     }, [location.pathname])
 
     const handleLogout = () => {
-        localStorage.removeItem('isLoggedIn')
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
         localStorage.removeItem('username')
         localStorage.removeItem('role')
+        localStorage.removeItem('userId')
         setAuth({
             isLoggedIn: false,
             username: '',
@@ -39,15 +41,15 @@ export default function UserLayout() {
             <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom">
                 <div className="container">
                     <Link to="/" className="navbar-brand fw-bold d-flex align-items-center gap-2">
-                        <img src="/logo.png" alt="gilmok" width={28} height={28}/>
+                        <img src="/logo.png" alt="gilmok" width={28} height={28} />
                         gilmok
                     </Link>
                     <div className="d-flex align-items-center gap-3">
                         {auth.isLoggedIn ? (
                             <>
-                                <span className="small text-muted d-none d-md-inline">
-                                    안녕하세요, <span className="fw-semibold">{auth.username || '사용자'}</span> 님
-                                </span>
+                <span className="small text-muted d-none d-md-inline">
+                  안녕하세요, <span className="fw-semibold">{auth.username || '사용자'}</span> 님
+                </span>
                                 <NavLink to="/my" className="btn btn-outline-primary btn-sm">
                                     마이페이지
                                 </NavLink>
@@ -81,7 +83,7 @@ export default function UserLayout() {
                 </div>
             </nav>
             <main className="container py-4">
-                <Outlet/>
+                <Outlet />
             </main>
             <footer className="bg-white border-top py-3 mt-auto">
                 <div className="container d-flex justify-content-between text-muted small">
