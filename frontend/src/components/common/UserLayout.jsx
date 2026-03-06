@@ -11,23 +11,24 @@ export default function UserLayout() {
     })
 
     useEffect(() => {
-        const accessToken = localStorage.getItem('accessToken')
+        // 토큰 대신 'isLoggedIn' 플래그로 로그인 여부를 확인
+        const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
         const username = localStorage.getItem('username') || ''
         const role = localStorage.getItem('role') || ''
 
         setAuth({
-            isLoggedIn: !!accessToken,
+            isLoggedIn,
             username,
             role,
         })
     }, [location.pathname])
 
     const handleLogout = () => {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
+        // 모든 인증 관련 정보 삭제
+        localStorage.removeItem('isLoggedIn')
         localStorage.removeItem('username')
         localStorage.removeItem('role')
-        localStorage.removeItem('userId')
+
         setAuth({
             isLoggedIn: false,
             username: '',
@@ -47,9 +48,9 @@ export default function UserLayout() {
                     <div className="d-flex align-items-center gap-3">
                         {auth.isLoggedIn ? (
                             <>
-                <span className="small text-muted d-none d-md-inline">
-                  안녕하세요, <span className="fw-semibold">{auth.username || '사용자'}</span> 님
-                </span>
+                                <span className="small text-muted d-none d-md-inline">
+                                    안녕하세요, <span className="fw-semibold">{auth.username || '사용자'}</span> 님
+                                </span>
                                 <NavLink to="/my" className="btn btn-outline-primary btn-sm">
                                     마이페이지
                                 </NavLink>
@@ -57,10 +58,10 @@ export default function UserLayout() {
                                     .split(',')
                                     .map((r) => r.trim().toUpperCase())
                                     .some((r) => r.endsWith('ADMIN')) && (
-                                    <NavLink to="/admin" className="btn btn-outline-secondary btn-sm">
-                                        관리자 페이지
-                                    </NavLink>
-                                )}
+                                        <NavLink to="/admin" className="btn btn-outline-secondary btn-sm">
+                                            관리자 페이지
+                                        </NavLink>
+                                    )}
                                 <button
                                     type="button"
                                     className="btn btn-link btn-sm text-decoration-none text-muted"
