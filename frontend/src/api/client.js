@@ -13,7 +13,9 @@ let refreshSubscribers = [];
  * 토큰 재발급 완료 후 대기 중인 모든 요청을 재시도
  */
 function onRefreshed() {
-    refreshSubscribers.forEach(({ resolve }) => resolve());
+    refreshSubscribers.forEach(({ resolve }) => {
+        resolve();
+    });
     refreshSubscribers = [];
 }
 
@@ -21,7 +23,9 @@ function onRefreshed() {
  * 토큰 재발급 실패 시 대기 중인 모든 요청을 에러 처리
  */
 function onRefreshFailed(error) {
-    refreshSubscribers.forEach(({ reject }) => reject(error));
+    refreshSubscribers.forEach(({ reject }) => {
+        reject(error);
+    });
     refreshSubscribers = [];
 }
 
@@ -108,7 +112,9 @@ async function request(baseUrl, path, options = {}) {
 
                 // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
                 const authKeys = ['isLoggedIn', 'username', 'role', 'userId'];
-                authKeys.forEach((k) => localStorage.removeItem(k));
+                authKeys.forEach((k) => {
+                    localStorage.removeItem(k);
+                });
                 window.location.href = '/auth/login';
                 throw err;
             }
