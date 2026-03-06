@@ -84,7 +84,7 @@ class QueueRedisRepositoryIntegrationTest {
     void registerIdempotent_admittedUser_returnsBlocked() {
         // given — 등록 후 입장
         queueRedisRepository.registerIdempotent(EVENT_ID, "user-1", "qk-1", 1.0, 600);
-        queueRedisRepository.runAdmissionCycle(EVENT_ID, 10, 10, 300_000, 180_000, 100, 100);
+        queueRedisRepository.runAdmissionCycle(EVENT_ID, 10, 10, 300_000, 180_000, 100, 100, 0);
 
         // when — 같은 userId로 재등록 시도
         List<Object> result = queueRedisRepository.registerIdempotent(
@@ -102,7 +102,7 @@ class QueueRedisRepositoryIntegrationTest {
     void getStatusAtomic_admitted_returnsCode1() {
         // given
         queueRedisRepository.registerIdempotent(EVENT_ID, "user-1", "qk-1", 1.0, 600);
-        queueRedisRepository.runAdmissionCycle(EVENT_ID, 10, 10, 300_000, 180_000, 100, 100);
+        queueRedisRepository.runAdmissionCycle(EVENT_ID, 10, 10, 300_000, 180_000, 100, 100, 0);
 
         // when
         List<Long> result = queueRedisRepository.getStatusAtomic(EVENT_ID, "qk-1", 60);
@@ -149,7 +149,7 @@ class QueueRedisRepositoryIntegrationTest {
 
         // when
         List<Object> result = queueRedisRepository.runAdmissionCycle(
-                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100);
+                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100, 0);
 
         // then — 최소 7개 + admitted members
         assertThat(result.size()).isGreaterThanOrEqualTo(7);
@@ -223,7 +223,7 @@ class QueueRedisRepositoryIntegrationTest {
 
         // when
         List<Object> result = queueRedisRepository.runAdmissionCycle(
-                EVENT_ID, 10, 10, ttlMs, 180_000, 100, 100);
+                EVENT_ID, 10, 10, ttlMs, 180_000, 100, 100, 0);
 
         // then
         long expiredCount = toLong(result.get(0));
@@ -244,7 +244,7 @@ class QueueRedisRepositoryIntegrationTest {
 
         // when — capacity=10이므로 첫 사이클에서 최대 10명만 입장
         List<Object> result1 = queueRedisRepository.runAdmissionCycle(
-                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100);
+                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100, 0);
 
         // then
         long admitted1 = toLong(result1.get(2));
@@ -253,7 +253,7 @@ class QueueRedisRepositoryIntegrationTest {
 
         // when — 즉시 두 번째 사이클 (토큰 미리필)
         List<Object> result2 = queueRedisRepository.runAdmissionCycle(
-                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100);
+                EVENT_ID, 10, 10, 300_000, 180_000, 100, 100, 0);
 
         // then — 토큰이 거의 없으므로 입장 제한
         long admitted2 = toLong(result2.get(2));
