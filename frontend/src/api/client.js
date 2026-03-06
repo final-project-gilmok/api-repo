@@ -1,111 +1,149 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 const AUTH_BASE = import.meta.env.VITE_AUTH_BASE_URL || ''
 
+/**
+ * 토큰 재발급(Refresh) 관련 상태 관리
+ * isRefreshing: 현재 재발급 프로세스가 진행 중인지 여부
+ * refreshSubscribers: 재발급 진행 중 대기하게 된 요청들의 콜백 리스트
+ */
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+/**
+ * 토큰 재발급 완료 후 대기 중인 모든 요청을 재시도
+ */
+function onRefreshed() {
+    refreshSubscribers.forEach((callback) => callback());
+    refreshSubscribers = [];
+}
+
+/**
+ * 재발급 진행 중인 경우, 요청을 대기열에 추가
+ */
+function addRefreshSubscriber(callback) {
+    refreshSubscribers.push(callback);
+}
+
+/**
+ * 쿠키 이름으로 값을 읽어오는 유틸리티
+ */
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+/**
+ * 공통 fetch 래퍼 함수
+ * - CSRF 토큰 자동 주입
+ * - 401 에러 시 토큰 자동 재발급(Reissue) 및 요청 재시도 로직 포함
+ */
 async function request(baseUrl, path, options = {}) {
-  const url = `${baseUrl}${path}`;
+    const url = `${baseUrl}${path}`;
 
-  // 1. 요청 전: 로컬 스토리지에서 Access Token 가져와서 헤더에 세팅
-  const accessToken = localStorage.getItem('accessToken');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
-
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-
-  // 첫 번째 원본 API 요청
-  let res = await fetch(url, { ...options, headers });
-
-  // 2. 응답 후: 401 에러(토큰 만료) 시 자동 갱신 로직 실행 (skipAuthRedirect 시 리다이렉트 없이 throw)
-  if (res.status === 401 && !path.includes('/auth/reissue')) {
-    if (options.skipAuthRedirect) {
-      const err = new Error('인증이 필요합니다.');
-      err.status = 401;
-      throw err;
-    }
-    const refreshToken = localStorage.getItem('refreshToken');
-
-    if (refreshToken) {
-      try {
-        // AUTH_BASE를 사용하여 auth 서버로 토큰 재발급 요청
-        const reissueRes = await fetch(`${AUTH_BASE}/auth/reissue`, {
-          method: 'POST',
-          headers: {
+    const fetchOptions = {
+        ...options,
+        headers: {
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refreshToken: refreshToken })
-        });
+            'X-XSRF-TOKEN': getCookie('XSRF-TOKEN'), // CSRF 방어용 헤더 추가
+            ...options.headers,
+        },
+        credentials: 'include', // 쿠키 기반 인증을 위해 설정
+    };
 
-        if (reissueRes.ok) {
-          // 재발급 성공! (data 래핑 여부 모두 처리)
-          const reissueJson = await reissueRes.json();
-          const reissueData = reissueJson.data !== undefined ? reissueJson.data : reissueJson;
+    let res = await fetch(url, fetchOptions);
 
-          const newAccessToken = reissueData.accessToken;
-          const newRefreshToken = reissueData.refreshToken;
+    // 401 Unauthorized 처리 (이미 재발급 요청인 경우는 제외)
+    if (res.status === 401 && !path.includes('/auth/reissue')) {
 
-          if (!newAccessToken) {
-            throw new Error('Invalid reissue response: accessToken is missing');
-          }
-
-          // 로컬 스토리지 업데이트
-          localStorage.setItem('accessToken', newAccessToken);
-          if (newRefreshToken) {
-            localStorage.setItem('refreshToken', newRefreshToken);
-          }
-
-          // 3. 재시도: 새로 발급받은 AT로 헤더를 덮어쓰고 원래 요청 다시 보내기
-          headers['Authorization'] = `Bearer ${newAccessToken}`;
-          res = await fetch(url, { ...options, headers });
-
-        } else {
-          throw new Error('Refresh Token expired');
+        // 특정 상황에서 리다이렉트를 건너뛰어야 할 경우
+        if (options.skipAuthRedirect) {
+            const err = new Error('인증이 필요합니다.');
+            err.status = 401;
+            throw err;
         }
-      } catch (err) {
-        // 재발급 실패 시 auth 키만 제거 후 로그인으로
-        const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
-        authKeys.forEach((k) => {
-          localStorage.removeItem(k);
-        });
-        window.location.href = '/auth/login';
-        throw err;
-      }
-    } else {
-      const authKeys = ['accessToken', 'refreshToken', 'username', 'role', 'userId'];
-      authKeys.forEach((k) => {
-        localStorage.removeItem(k);
-      });
-      window.location.href = '/auth/login';
-      throw new Error('No refresh token available');
+
+        // 1. 이미 다른 요청에 의해 재발급이 진행 중인 경우 대기열 진입
+        if (isRefreshing) {
+            await new Promise((resolve) => {
+                addRefreshSubscriber(() => {
+                    resolve();
+                });
+            });
+            // 재발급 완료 후 원래 요청 재시도
+            res = await fetch(url, fetchOptions);
+        }
+
+        // 2. 처음으로 401을 받아 재발급을 주도하는 경우
+        else {
+            isRefreshing = true;
+
+            try {
+                // 서버에 토큰 재발급 요청
+                const reissueRes = await fetch(`${AUTH_BASE}/auth/reissue`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                });
+
+                if (reissueRes.ok) {
+                    isRefreshing = false;
+                    onRefreshed(); // 대기 중인 요청들 모두 실행
+
+                    // 현재 요청 재시도
+                    res = await fetch(url, fetchOptions);
+                } else {
+                    throw new Error('Refresh Token expired');
+                }
+            } catch (err) {
+                isRefreshing = false;
+                refreshSubscribers = [];
+
+                // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
+                const authKeys = ['isLoggedIn', 'username', 'role', 'userId'];
+                authKeys.forEach((k) => localStorage.removeItem(k));
+                window.location.href = '/auth/login';
+                throw err;
+            }
+        }
     }
-  }
 
-  // 4. 최종 응답 파싱
-  const json = await res.json().catch(() => ({}));
+    // 응답 결과 처리
+    const json = await res.json().catch(() => ({}));
 
-  // 백엔드 에러 처리를 HTTP 상태 코드(res.ok) 기반으로 변경
-  if (!res.ok) {
-    const err = new Error(json.message || res.statusText || '요청 실패');
-    err.status = res.status;
-    err.code = json.code;
-    throw err;
-  }
+    if (!res.ok) {
+        const err = new Error(json.message || res.statusText || '요청 실패');
+        err.status = res.status;
+        err.code = json.code;
+        throw err;
+    }
 
-  // 성공 시 껍데기(data) 없이 전체 JSON 반환 (data 필드가 있으면 추출)
-  return json.data !== undefined ? json.data : json;
+    // API 관례에 따라 data 필드가 있으면 해당 데이터만 반환
+    return json.data !== undefined ? json.data : json;
 }
 
+/**
+ * 일반 서비스용 API 클라이언트
+ */
 export const api = {
-  get: (path, headers, opts) => request(API_BASE, path, { method: 'GET', headers, ...opts }),
-  post: (path, body, opts) => request(API_BASE, path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined, ...opts }),
-  put: (path, body, opts) => request(API_BASE, path, { method: 'PUT', body: JSON.stringify(body), ...opts }),
-  delete: (path, opts) => request(API_BASE, path, { method: 'DELETE', ...opts }),
+    get: (path, headers, opts) => request(API_BASE, path, {method: 'GET', headers, ...opts}),
+    post: (path, body, opts) => request(API_BASE, path, {
+        method: 'POST',
+        body: body !== undefined ? JSON.stringify(body) : undefined, ...opts
+    }),
+    put: (path, body, opts) => request(API_BASE, path, {method: 'PUT', body: JSON.stringify(body), ...opts}),
+    delete: (path, opts) => request(API_BASE, path, {method: 'DELETE', ...opts}),
 }
 
+/**
+ * 인증 전용 API 클라이언트
+ */
 export const authApi = {
-  get: (path) => request(AUTH_BASE, path, { method: 'GET' }),
-  post: (path, body) => request(AUTH_BASE, path, { method: 'POST', body: JSON.stringify(body) }),
-  put: (path, body) => request(AUTH_BASE, path, { method: 'PUT', body: JSON.stringify(body) }),
+    get: (path) => request(AUTH_BASE, path, {method: 'GET'}),
+    post: (path, body) => request(AUTH_BASE, path, {
+        method: 'POST',
+        body: body !== undefined ? JSON.stringify(body) : undefined
+    }),
+    put: (path, body) => request(AUTH_BASE, path, {method: 'PUT', body: JSON.stringify(body)}),
 }
