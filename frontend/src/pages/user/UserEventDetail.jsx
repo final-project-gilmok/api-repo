@@ -108,7 +108,7 @@ export default function UserEventDetail() {
             onClick={handleEnterQueue}
             disabled={!eventId || event.status !== 'OPEN'}
           >
-            대기열 입장
+            예약 입장
           </button>
           {event.status !== 'OPEN' && (
             <p className="text-muted small mt-2 mb-0">예매 가능 상태(OPEN)일 때만 입장할 수 있습니다.</p>

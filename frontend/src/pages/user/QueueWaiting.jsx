@@ -27,7 +27,7 @@ export default function QueueWaiting() {
         localStorage.setItem(storageKey, d.queueKey)
         sessionStorage.setItem(initFlag, 'true')
       })
-      .catch(() => setError('대기열 등록에 실패했습니다.'))
+      .catch(() => setError('예약 입장에 실패했습니다.'))
   }, [eventId, storageKey, initFlag])
 
   // 대기열 등록 (새 탭 vs 새로고침 판별)
