@@ -17,10 +17,6 @@ public record AiPolicyRecommendationDto(
         @JsonProperty(required = true)
         int recommendedAdmissionConcurrency,
 
-        @JsonPropertyDescription("추천 입장 토큰 유효 시간(초)")
-        @JsonProperty(required = true)
-        long recommendedTokenTtlSeconds,
-
         @JsonPropertyDescription("추천 이유 (최대 3문장 이내)")
         @JsonProperty(required = true)
         String rationale,
