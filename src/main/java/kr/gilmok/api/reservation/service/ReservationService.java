@@ -119,7 +119,14 @@ public class ReservationService {
         // 토큰 클레임과 예약 정보 대조
         Claims claims = jwtProvider.getClaims(admissionToken);
         String tokenEventId = claims.get("evt", String.class);
+        String tokenReservationCode = claims.get("res", String.class);
         Long tokenUserId = claims.get("id", Long.class);
+
+        if (tokenReservationCode == null || !tokenReservationCode.equals(reservationCode)) {
+            log.warn("[Security] AdmissionToken reservationCode mismatch. tokenRes: {}, requestRes: {}",
+                    tokenReservationCode, reservationCode);
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
 
         if (tokenEventId == null || !tokenEventId.equals(String.valueOf(reservation.getEvent().getId()))) {
             log.warn("[Security] AdmissionToken eventId mismatch. token: {}, reservation: {}", tokenEventId,

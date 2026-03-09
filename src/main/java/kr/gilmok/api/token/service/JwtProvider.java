@@ -29,6 +29,7 @@ public class JwtProvider {
                 .claim("status", payload.status())
                 .claim("role", payload.role())
                 .claim("evt", payload.evt())
+                .claim("res", payload.res())
                 .claim("rnk", payload.rnk())
                 // nbf와 exp는 초 단위(epoch)이므로 밀리초(*1000)로 변환해 Date 객체로 설정
                 .setNotBefore(new Date(payload.nbf() * 1000))

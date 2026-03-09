@@ -44,7 +44,8 @@ public class ReservationController {
 
         // 3. 입장용 토큰 쿠키 발급 (예약 선점 성공 시에만)
         String token = tokenService.issueAdmissionToken(
-                String.valueOf(request.eventId()), principal.user().id(), principal.getUsername(), 0L);
+                String.valueOf(request.eventId()), res.reservationCode(), principal.user().id(),
+                principal.getUsername(), 0L);
 
         ResponseCookie cookie = createAdmissionCookie(token, admittedTtlSeconds,
                 "/reservations/" + res.reservationCode() + "/confirm");
