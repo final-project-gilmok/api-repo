@@ -12,6 +12,8 @@ import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -48,7 +50,16 @@ public class EventService {
     public EventResponse closeEvent(Long eventId) {
         Event event = findEventById(eventId);
         event.close();
-        policyService.evictPolicyCache(eventId);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    policyService.evictPolicyCache(eventId);
+                }
+            });
+        } else {
+            policyService.evictPolicyCache(eventId);
+        }
         return EventResponse.from(event);
     }
 
