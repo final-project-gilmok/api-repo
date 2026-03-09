@@ -65,7 +65,7 @@ public class PolicyCacheRepository {
         }
     }
 
-/*PUT policy 시 해당 eventId 캐시 무효화*/
+    /** 해당 eventId의 정책 캐시를 삭제한다. 이벤트 close 시 호출. */
     public void evict(Long eventId) {
         String key = KEY_PREFIX + eventId;
         Boolean removed = redisTemplate.delete(key);
