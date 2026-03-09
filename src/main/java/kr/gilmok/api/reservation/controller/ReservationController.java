@@ -92,7 +92,7 @@ public class ReservationController {
     private ResponseCookie createAdmissionCookie(String value, long maxAgeSeconds) {
         return ResponseCookie.from("admissionToken", value)
                 .httpOnly(true)
-                .secure(false) // HTTPS 환경이라면 true로 변경 필요
+                .secure(false)
                 .path("/")
                 .maxAge(maxAgeSeconds)
                 .sameSite("Lax")
