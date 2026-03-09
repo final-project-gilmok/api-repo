@@ -89,14 +89,8 @@ export default function QueueWaiting() {
         if (d.pollAfterMs > 0) pollIntervalRef.current = d.pollAfterMs
 
         if (d.status === 'ADMITTABLE') {
-          if (!d.admissionToken) {
-            setError('입장 토큰 발급에 실패했습니다. 잠시 후 다시 시도해주세요.')
-            clearTimeout(timeoutRef.current)
-            setQueueKey(null)
-            return
-          }
-          sessionStorage.setItem(`admissionToken_${eventId}`, d.admissionToken)
-          navigate(`/events/${eventId}/seats`, { state: { queueKey, admissionToken: d.admissionToken } })
+          // 입장 가능 상태면 좌석 선택 페이지로 이동 (토큰은 나중에 쿠키로 발급됨)
+          navigate(`/events/${eventId}/seats`, { state: { queueKey } })
         }
       })
   }, [queueKey, eventId, navigate])

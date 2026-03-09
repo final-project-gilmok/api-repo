@@ -18,9 +18,9 @@ public record ReservationResponse(
         ReservationStatus status,
         LocalDateTime confirmedAt,
         LocalDateTime cancelledAt,
-        LocalDateTime createdAt
-) {
-    public static ReservationResponse from(Reservation r) {
+        LocalDateTime createdAt,
+        int holdSeconds) {
+    public static ReservationResponse from(Reservation r, int holdSeconds) {
         return new ReservationResponse(
                 r.getId(),
                 r.getReservationCode(),
@@ -34,7 +34,7 @@ public record ReservationResponse(
                 r.getStatus(),
                 r.getConfirmedAt(),
                 r.getCancelledAt(),
-                r.getCreatedAt()
-        );
+                r.getCreatedAt(),
+                holdSeconds);
     }
 }

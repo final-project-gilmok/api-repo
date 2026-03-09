@@ -15,7 +15,7 @@ public class TokenService {
     private long admittedTtlSeconds;
 
     // 대기열 통과자에게 발급할 입장용 토큰 생성
-    public String issueAdmissionToken(String eventId, Long userId, String username, long rank) {
+    public String issueAdmissionToken(String eventId, String reservationCode, Long userId, String username, long rank) {
         long now = System.currentTimeMillis() / 1000;
 
         TokenPayload payload = TokenPayload.builder()
@@ -24,6 +24,7 @@ public class TokenService {
                 .status("ADMITTED")
                 .role("USER")
                 .evt(eventId)
+                .res(reservationCode)
                 .rnk(rank)
                 .nbf(now)
                 .exp(now + admittedTtlSeconds)

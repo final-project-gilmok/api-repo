@@ -1,5 +1,8 @@
 package kr.gilmok.api.reservation.service;
 
+import io.jsonwebtoken.Claims;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
@@ -12,9 +15,8 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -49,6 +51,8 @@ class ReservationServiceTest {
     private QueueRedisRepository queueRedisRepository;
     @Mock
     private MeterRegistry meterRegistry;
+    @Mock
+    private JwtProvider jwtProvider;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -116,7 +120,6 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
@@ -130,21 +133,6 @@ class ReservationServiceTest {
             assertThat(response.quantity()).isEqualTo(2);
             assertThat(response.reservationCode()).isNotNull();
             verify(seatLockRedisRepository).lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt());
-        }
-
-        @Test
-        @DisplayName("대기열 미통과 시 NOT_ADMITTED 예외가 발생한다")
-        void create_notAdmitted_throwsException() {
-            // given
-            Long userId = 1L;
-            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(false);
-
-            // when & then
-            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
-                    .isInstanceOf(CustomException.class)
-                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
-                            .isEqualTo(ReservationErrorCode.NOT_ADMITTED));
         }
 
         @Test
@@ -228,11 +216,20 @@ class ReservationServiceTest {
                     .thenReturn(Optional.of(reservation));
             when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
 
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
+            when(claims.get("id", Long.class)).thenReturn(1L);
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
+
             Counter counter = mock(Counter.class);
-            when(meterRegistry.counter(anyString(), anyString(), anyString())).thenReturn(counter);
+            when(meterRegistry.counter(eq("reservation.success.total"), eq("eventId"), eq("1")))
+                    .thenReturn(counter);
 
             // when
-            ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode());
+            ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode(),
+                    "valid-token");
 
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
@@ -249,9 +246,16 @@ class ReservationServiceTest {
 
             when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
+            when(claims.get("id", Long.class)).thenReturn(999L);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
             // when & then
-            assertThatThrownBy(() -> reservationService.confirmReservation(999L, reservation.getReservationCode()))
+            assertThatThrownBy(
+                    () -> reservationService.confirmReservation(999L, reservation.getReservationCode(), "valid-token"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.UNAUTHORIZED));
@@ -269,9 +273,16 @@ class ReservationServiceTest {
 
             when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
                     .thenReturn(Optional.of(reservation));
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
+            when(claims.get("id", Long.class)).thenReturn(1L);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
             // when & then
-            assertThatThrownBy(() -> reservationService.confirmReservation(1L, reservation.getReservationCode()))
+            assertThatThrownBy(
+                    () -> reservationService.confirmReservation(1L, reservation.getReservationCode(), "valid-token"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.RESERVATION_EXPIRED));

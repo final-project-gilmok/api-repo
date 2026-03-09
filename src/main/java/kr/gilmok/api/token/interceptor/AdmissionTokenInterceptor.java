@@ -1,6 +1,7 @@
 package kr.gilmok.api.token.interceptor;
 
 import io.jsonwebtoken.Claims;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import kr.gilmok.api.token.exception.AdmissionTokenErrorCode;
@@ -12,6 +13,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.Arrays;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -19,7 +22,6 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
 
     private final JwtProvider jwtProvider;
 
-    private static final String ADMISSION_HEADER = "X-Admission-Token";
     private static final String ADMITTED_STATUS = "ADMITTED";
 
     @Override
@@ -30,8 +32,8 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 헤더에서 입장용 토큰 추출
-        String admissionToken = request.getHeader(ADMISSION_HEADER);
+        // 입장용 토큰 추출
+        String admissionToken = resolveToken(request);
 
         if (admissionToken == null || admissionToken.trim().isEmpty()) {
             log.warn("[AdmissionInterceptor] 입장용 토큰 누락 - URI: {}", request.getRequestURI());
@@ -57,9 +59,29 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
         // 다음 필터/컨트롤러에서 사용할 수 있도록 검증된 데이터를 Request에 담아줌
         request.setAttribute("admittedEventId", claims.get("evt"));
         request.setAttribute("admittedUserId", claims.get("sub"));
+        request.setAttribute("admissionToken", admissionToken);
 
         log.info("[AdmissionInterceptor] 입장 통과 - eventId: {}, userId: {}", claims.get("evt"), claims.get("sub"));
 
         return true;
+    }
+
+    private String resolveToken(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String[] parts = uri.split("/");
+        if (parts.length < 3) {
+            return null;
+        }
+        String code = parts[2];
+        String targetCookieName = "admissionToken_" + code;
+
+        if (request.getCookies() != null) {
+            return Arrays.stream(request.getCookies())
+                    .filter(c -> targetCookieName.equals(c.getName()))
+                    .map(Cookie::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+        return null;
     }
 }

@@ -1,12 +1,18 @@
 package kr.gilmok.api.reservation.controller;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import kr.gilmok.api.queue.service.QueueService;
 import kr.gilmok.api.reservation.dto.ReservationCreateRequest;
 import kr.gilmok.api.reservation.dto.ReservationResponse;
 import kr.gilmok.api.reservation.service.ReservationService;
+import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,19 +24,51 @@ import java.util.List;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final QueueService queueService;
+    private final TokenService tokenService;
+
+    @Value("${app.admitted-ttl-seconds}")
+    private long admittedTtlSeconds;
 
     @PostMapping
     public ApiResponse<ReservationResponse> create(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @Valid @RequestBody ReservationCreateRequest request) {
-        return ApiResponse.success(reservationService.createReservation(principal.user().id(), request));
+            @Valid @RequestBody ReservationCreateRequest request,
+            HttpServletResponse response) {
+
+        // 1. 대기열 검증 (Service 호출 전 혹은 내부에서 수행 가능하지만 명시적으로 분리)
+        queueService.verifyQueueAccess(String.valueOf(request.eventId()), request.queueKey(), principal.user().id());
+
+        // 2. 예약 생성 (좌석 선점)
+        ReservationResponse res = reservationService.createReservation(principal.user().id(), request);
+
+        // 3. 입장용 토큰 쿠키 발급 (예약 선점 성공 시에만)
+        String token = tokenService.issueAdmissionToken(
+                String.valueOf(request.eventId()), res.reservationCode(), principal.user().id(),
+                principal.getUsername(), 0L);
+
+        ResponseCookie cookie = createAdmissionCookie("admissionToken_" + res.reservationCode(), token,
+                admittedTtlSeconds, "/");
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+        return ApiResponse.success(res);
     }
 
     @PostMapping("/{code}/confirm")
     public ApiResponse<ReservationResponse> confirm(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable String code) {
-        return ApiResponse.success(reservationService.confirmReservation(principal.user().id(), code));
+            @PathVariable String code,
+            @RequestAttribute(value = "admissionToken") String admissionToken,
+            HttpServletResponse response) {
+
+        // 1. 예약 확정 (내부에서 토큰 검증 수행)
+        ReservationResponse res = reservationService.confirmReservation(principal.user().id(), code, admissionToken);
+
+        // 2. 확정 성공 시 쿠키 만료
+        ResponseCookie cookie = createAdmissionCookie("admissionToken_" + code, "", 0, "/");
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+        return ApiResponse.success(res);
     }
 
     @DeleteMapping("/{code}")
@@ -51,5 +89,15 @@ public class ReservationController {
     public ApiResponse<List<ReservationResponse>> getMyReservations(
             @AuthenticationPrincipal CustomUserDetails principal) {
         return ApiResponse.success(reservationService.getMyReservations(principal.user().id()));
+    }
+
+    private ResponseCookie createAdmissionCookie(String name, String value, long maxAgeSeconds, String path) {
+        return ResponseCookie.from(name, value)
+                .httpOnly(true)
+                .secure(false)
+                .path(path)
+                .maxAge(maxAgeSeconds)
+                .sameSite("Lax")
+                .build();
     }
 }
