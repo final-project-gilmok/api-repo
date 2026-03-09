@@ -57,6 +57,11 @@ public class ReservationService {
             throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
         }
 
+        Long queueOwner = queueRedisRepository.getQueueOwnerUserId(eventIdStr, request.queueKey());
+        if (queueOwner == null || !queueOwner.equals(userId)) {
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
+
         // 이벤트 확인
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.EVENT_NOT_FOUND));
