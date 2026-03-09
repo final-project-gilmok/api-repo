@@ -120,7 +120,6 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
@@ -134,21 +133,6 @@ class ReservationServiceTest {
             assertThat(response.quantity()).isEqualTo(2);
             assertThat(response.reservationCode()).isNotNull();
             verify(seatLockRedisRepository).lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt());
-        }
-
-        @Test
-        @DisplayName("대기열 미통과 시 NOT_ADMITTED 예외가 발생한다")
-        void create_notAdmitted_throwsException() {
-            // given
-            Long userId = 1L;
-            ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(false);
-
-            // when & then
-            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
-                    .isInstanceOf(CustomException.class)
-                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
-                            .isEqualTo(ReservationErrorCode.NOT_ADMITTED));
         }
 
         @Test

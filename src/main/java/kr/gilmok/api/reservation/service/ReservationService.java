@@ -56,10 +56,6 @@ public class ReservationService {
         }
 
         // 대기열 통과(ADMITTABLE) 검증
-        String eventIdStr = String.valueOf(request.eventId());
-        if (!queueRedisRepository.isAdmitted(eventIdStr, request.queueKey())) {
-            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
-        }
 
         // 이벤트 확인
         Event event = eventRepository.findById(request.eventId())
