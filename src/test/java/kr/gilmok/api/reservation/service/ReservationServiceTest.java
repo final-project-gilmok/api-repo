@@ -12,7 +12,9 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
+import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +51,8 @@ class ReservationServiceTest {
     private QueueRedisRepository queueRedisRepository;
     @Mock
     private MeterRegistry meterRegistry;
+    @Mock
+    private JwtProvider jwtProvider;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -228,11 +232,15 @@ class ReservationServiceTest {
                     .thenReturn(Optional.of(reservation));
             when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
 
-            Counter counter = mock(Counter.class);
-            when(meterRegistry.counter(anyString(), anyString(), anyString())).thenReturn(counter);
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("id", Long.class)).thenReturn(1L);
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
             // when
-            ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode());
+            ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode(),
+                    "valid-token");
 
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
@@ -247,11 +255,11 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             Reservation reservation = createReservation(1L, event, seat, 1L);
 
-            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
-                    .thenReturn(Optional.of(reservation));
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
 
             // when & then
-            assertThatThrownBy(() -> reservationService.confirmReservation(999L, reservation.getReservationCode()))
+            assertThatThrownBy(
+                    () -> reservationService.confirmReservation(999L, reservation.getReservationCode(), "valid-token"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.UNAUTHORIZED));
@@ -267,11 +275,15 @@ class ReservationServiceTest {
             // createdAt을 6분 전으로 설정 (TTL 300초 초과)
             setField(reservation, "createdAt", LocalDateTime.now().minusSeconds(360));
 
-            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
-                    .thenReturn(Optional.of(reservation));
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("id", Long.class)).thenReturn(1L);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
             // when & then
-            assertThatThrownBy(() -> reservationService.confirmReservation(1L, reservation.getReservationCode()))
+            assertThatThrownBy(
+                    () -> reservationService.confirmReservation(1L, reservation.getReservationCode(), "valid-token"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.RESERVATION_EXPIRED));
