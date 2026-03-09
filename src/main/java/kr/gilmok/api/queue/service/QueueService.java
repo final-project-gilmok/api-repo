@@ -11,7 +11,6 @@ import kr.gilmok.api.queue.exception.QueueErrorCode;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
-import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class QueueService {
 
-    private final TokenService tokenService;
     private final QueueRedisRepository queueRedisRepository;
     private final PolicyCacheRepository policyCacheRepository;
     private final MeterRegistry meterRegistry;
@@ -109,7 +107,7 @@ public class QueueService {
         if (ownerUserId == null || !ownerUserId.equals(userId)) {
             log.warn("Queue ownership mismatch: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
             return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0, null);
-            }
+        }
 
         List<Long> r = queueRedisRepository.getStatusAtomic(eventId, queueKey, ETA_WINDOW_SECONDS);
 
@@ -124,10 +122,7 @@ public class QueueService {
         long admitCountInWindow = r.get(3);
 
         if (statusCode == 1) {
-            long safeRank = Math.max(0, rank);
-            String admissionToken = tokenService.issueAdmissionToken(eventId, userId, username, safeRank);
-
-            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0, admissionToken);
+            return new QueueStatusResponse(QueueStatus.ADMITTABLE, 0, 0, 0, 0, null);
         }
 
         if (statusCode == 2) {
@@ -274,5 +269,20 @@ public class QueueService {
         metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
 
         return metrics;
+    }
+
+    // 대기열 통과 여부 및 소유권 검증 (토큰 발급 전 단계)
+    public void verifyQueueAccess(String eventId, String queueKey, Long userId) {
+        Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
+        if (ownerUserId == null || !ownerUserId.equals(userId)) {
+            log.warn("Queue ownership mismatch or expired: eventId={}, queueKey={}, userId={}", eventId, queueKey,
+                    userId);
+            throw new CustomException(QueueErrorCode.INVALID_QUEUE_KEY);
+        }
+
+        if (!queueRedisRepository.isAdmitted(eventId, queueKey)) {
+            log.warn("Queue not admitted: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
+            throw new CustomException(QueueErrorCode.NOT_ADMITTED);
+        }
     }
 }

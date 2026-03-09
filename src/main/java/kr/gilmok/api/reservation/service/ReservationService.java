@@ -16,6 +16,7 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,13 +37,17 @@ public class ReservationService {
     private final EventRepository eventRepository;
     private final SeatLockRedisRepository seatLockRedisRepository;
     private final QueueRedisRepository queueRedisRepository;
-    private final MeterRegistry meterRegistry; // [추가]
+    private final MeterRegistry meterRegistry;
+    private final JwtProvider jwtProvider;
 
     @Value("${reservation.seat-lock-ttl-seconds:300}")
     private int seatLockTtlSeconds;
 
     @Value("${reservation.max-quantity:4}")
     private int maxQuantity;
+
+    @Value("${app.jwt.secret}")
+    private String secretKey;
 
     @Transactional
     public ReservationResponse createReservation(Long userId, ReservationCreateRequest request) {
@@ -76,8 +81,7 @@ public class ReservationService {
         // Redis 좌석 잠금 (원자적)
         boolean locked = seatLockRedisRepository.lock(
                 request.eventId(), request.seatId(), userId,
-                request.quantity(), seatLockTtlSeconds
-        );
+                request.quantity(), seatLockTtlSeconds);
         if (!locked) {
             throw new CustomException(ReservationErrorCode.SEAT_LOCK_FAILED);
         }
@@ -104,7 +108,12 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationResponse confirmReservation(Long userId, String reservationCode) {
+    public ReservationResponse confirmReservation(Long userId, String reservationCode, String admissionToken) {
+        // [수정] 입장용 토큰 검증 - Interceptor에서 1차 검증되었지만, Service에서도 JwtProvider로 정합성 체크
+        if (admissionToken == null || !jwtProvider.validateToken(admissionToken)) {
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
+
         Reservation reservation = reservationRepository.findByReservationCodeForUpdate(reservationCode)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.RESERVATION_NOT_FOUND));
 
