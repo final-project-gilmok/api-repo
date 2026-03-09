@@ -7,7 +7,6 @@ import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.api.policy.service.PolicyService;
-import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.exception.CustomException;
 import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -73,12 +72,11 @@ class EventServiceTest {
             });
 
             // when
-            ApiResponse<EventResponse> response = eventService.createEvent(request);
+            EventResponse response = eventService.createEvent(request);
 
             // then
-            assertThat(response.getStatus()).isEqualTo("success");
-            assertThat(response.getData()).isNotNull();
-            assertThat(response.getData().status()).isEqualTo(EventStatus.DRAFT);
+            assertThat(response).isNotNull();
+            assertThat(response.status()).isEqualTo(EventStatus.DRAFT);
 
             verify(eventRepository).save(any(Event.class));
             verify(policyService).createPolicyForEvent(1L, null);
@@ -104,13 +102,12 @@ class EventServiceTest {
             when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
 
             // when
-            ApiResponse<EventResponse> response = eventService.openEvent(eventId);
+            EventResponse response = eventService.openEvent(eventId);
 
             // then
-            assertThat(response.getStatus()).isEqualTo("success");
-            assertThat(response.getData()).isNotNull();
-            assertThat(response.getData().eventId()).isEqualTo(eventId);
-            assertThat(response.getData().status()).isEqualTo(EventStatus.OPEN);
+            assertThat(response).isNotNull();
+            assertThat(response.eventId()).isEqualTo(eventId);
+            assertThat(response.status()).isEqualTo(EventStatus.OPEN);
 
             verify(eventRepository).findById(eventId);
         }
@@ -135,13 +132,12 @@ class EventServiceTest {
             when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
 
             // when
-            ApiResponse<EventResponse> response = eventService.closeEvent(eventId);
+            EventResponse response = eventService.closeEvent(eventId);
 
             // then
-            assertThat(response.getStatus()).isEqualTo("success");
-            assertThat(response.getData()).isNotNull();
-            assertThat(response.getData().eventId()).isEqualTo(eventId);
-            assertThat(response.getData().status()).isEqualTo(EventStatus.CLOSED);
+            assertThat(response).isNotNull();
+            assertThat(response.eventId()).isEqualTo(eventId);
+            assertThat(response.status()).isEqualTo(EventStatus.CLOSED);
 
             verify(eventRepository).findById(eventId);
         }
@@ -173,15 +169,14 @@ class EventServiceTest {
             when(eventRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(event1, event2));
 
             // when
-            ApiResponse<List<EventResponse>> response = eventService.getEvents();
+            List<EventResponse> response = eventService.getEvents();
 
             // then
-            assertThat(response.getStatus()).isEqualTo("success");
-            assertThat(response.getData()).hasSize(2);
-            assertThat(response.getData().get(0).eventId()).isEqualTo(1L);
-            assertThat(response.getData().get(0).name()).isEqualTo("첫 번째");
-            assertThat(response.getData().get(1).eventId()).isEqualTo(2L);
-            assertThat(response.getData().get(1).name()).isEqualTo("두 번째");
+            assertThat(response).hasSize(2);
+            assertThat(response.get(0).eventId()).isEqualTo(1L);
+            assertThat(response.get(0).name()).isEqualTo("첫 번째");
+            assertThat(response.get(1).eventId()).isEqualTo(2L);
+            assertThat(response.get(1).name()).isEqualTo("두 번째");
             verify(eventRepository).findAllByOrderByCreatedAtDesc();
         }
 
@@ -190,10 +185,9 @@ class EventServiceTest {
         void getEvents_emptyList() {
             when(eventRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of());
 
-            ApiResponse<List<EventResponse>> response = eventService.getEvents();
+            List<EventResponse> response = eventService.getEvents();
 
-            assertThat(response.getStatus()).isEqualTo("success");
-            assertThat(response.getData()).isEmpty();
+            assertThat(response).isEmpty();
             verify(eventRepository).findAllByOrderByCreatedAtDesc();
         }
     }
