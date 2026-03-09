@@ -260,7 +260,14 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             Reservation reservation = createReservation(1L, event, seat, 1L);
 
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
+            when(claims.get("id", Long.class)).thenReturn(999L);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
             // when & then
             assertThatThrownBy(
@@ -280,6 +287,8 @@ class ReservationServiceTest {
             // createdAt을 6분 전으로 설정 (TTL 300초 초과)
             setField(reservation, "createdAt", LocalDateTime.now().minusSeconds(360));
 
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             Claims claims = mock(Claims.class);
             when(claims.get("evt", String.class)).thenReturn("1");
