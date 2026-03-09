@@ -3,8 +3,6 @@ package kr.gilmok.api.policy.service;
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.policy.constants.PolicyDefaults;
-import kr.gilmok.api.policy.dto.AiRecommendationResponse;
-import kr.gilmok.api.policy.dto.MetricsResponse;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.dto.PolicyCreateRequest;
 import kr.gilmok.api.policy.dto.PolicyResponse;
@@ -18,8 +16,6 @@ import kr.gilmok.api.policy.repository.PolicyRepository;
 import kr.gilmok.api.policy.validation.BlockRulesValidator;
 import kr.gilmok.common.exception.CustomException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-
-import jakarta.persistence.OptimisticLockException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -32,6 +28,7 @@ import java.util.Optional;
 
 @Slf4j
 @Service
+@Transactional(readOnly = true)
 public class PolicyService {
 
     private final PolicyRepository policyRepository;
@@ -58,10 +55,10 @@ public class PolicyService {
             BlockRulesValidator.validate(request.blockRules());
         }
         Policy policy = new Policy(eventId);
-        int rps = request != null && request.admissionRps() != null ? request.admissionRps() : PolicyDefaults.ADMISSION_RPS;
-        int concurrency = request != null && request.admissionConcurrency() != null ? request.admissionConcurrency() : PolicyDefaults.ADMISSION_CONCURRENCY;
+        int rps = effectiveAdmissionRps(request);
+        int concurrency = effectiveAdmissionConcurrency(request);
         var blockRules = request != null && request.blockRules() != null ? request.blockRules() : PolicyDefaults.blockRules();
-        String gateMode = request != null && request.gateMode() != null && !request.gateMode().isBlank() ? request.gateMode() : PolicyDefaults.GATE_MODE;
+        String gateMode = effectiveGateMode(request);
         Integer maxRps = request != null ? request.maxRequestsPerSecond() : null;
         Integer blockMin = request != null ? request.blockDurationMinutes() : null;
         policy.updatePolicy(rps, concurrency, blockRules, gateMode, null, maxRps, blockMin);
@@ -81,7 +78,7 @@ public class PolicyService {
     }
 
     @Transactional
-    public Long updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId) {
+    public PolicyResponse updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId) {
         Objects.requireNonNull(updatedByUserId, "updatedByUserId must not be null");
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
@@ -107,7 +104,7 @@ public class PolicyService {
         );
         try {
             policyRepository.saveAndFlush(policy);
-        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
+        } catch (ObjectOptimisticLockingFailureException e) {
             log.warn("Policy update conflict: eventId={}", eventId, e);
             throw new CustomException(PolicyErrorCode.POLICY_CONFLICT);
         }
@@ -127,13 +124,12 @@ public class PolicyService {
             }
         }
 
-        return policy.getPolicyVersion();
+        return PolicyResponse.from(policy);
     }
 
 
 /*     정책 조회. Cache-Aside: Redis 우선 조회 → 미스 시에만 DB, 이벤트 검증.
      negative 캐시(exists=false): 정책 없음을 짧은 TTL로 캐시해 캐시 관통 방지.*/
-    @Transactional(readOnly = true)
     public PolicyResponse getPolicyByEventId(Long eventId) {
         Optional<PolicyCacheDto> cached;
         try {
@@ -171,21 +167,24 @@ public class PolicyService {
         return PolicyResponse.from(policy);
     }
 
-    @Transactional(readOnly = true)
-    public MetricsResponse getMetrics(Long eventId) {
-        if (!eventRepository.existsById(eventId)) {
-            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+    /** 이벤트 close 시 해당 이벤트의 정책 캐시를 무효화한다. */
+    public void evictPolicyCache(Long eventId) {
+        try {
+            policyCacheRepository.evict(eventId);
+        } catch (Exception e) {
+            log.warn("Policy cache evict failed: eventId={}", eventId, e);
         }
-        return MetricsResponse.mock();
     }
 
-    // AI 추천 조회
-    @Transactional(readOnly = true)
-    public AiRecommendationResponse getAiRecommendation(Long eventId) {
-        if (!eventRepository.existsById(eventId)) {
-            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
-        }
-        return AiRecommendationResponse.mock();
+    private static int effectiveAdmissionRps(PolicyCreateRequest request) {
+        return request != null && request.admissionRps() != null ? request.admissionRps() : PolicyDefaults.ADMISSION_RPS;
     }
 
+    private static int effectiveAdmissionConcurrency(PolicyCreateRequest request) {
+        return request != null && request.admissionConcurrency() != null ? request.admissionConcurrency() : PolicyDefaults.ADMISSION_CONCURRENCY;
+    }
+
+    private static String effectiveGateMode(PolicyCreateRequest request) {
+        return request != null && request.gateMode() != null && !request.gateMode().isBlank() ? request.gateMode() : PolicyDefaults.GATE_MODE;
+    }
 }

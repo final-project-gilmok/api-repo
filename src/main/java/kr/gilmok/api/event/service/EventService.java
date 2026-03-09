@@ -8,11 +8,12 @@ import kr.gilmok.api.event.entity.EventStatus;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.api.policy.service.PolicyService;
-import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -25,7 +26,7 @@ public class EventService {
     private final PolicyService policyService;
 
     @Transactional
-    public ApiResponse<EventResponse> createEvent(EventCreateRequest dto) {
+    public EventResponse createEvent(EventCreateRequest dto) {
         Event event = Event.builder()
                 .name(dto.name())
                 .description(dto.description())
@@ -35,21 +36,31 @@ public class EventService {
 
         Event saved = eventRepository.save(event);
         policyService.createPolicyForEvent(saved.getId(), dto.policy());
-        return ApiResponse.success(EventResponse.from(saved));
+        return EventResponse.from(saved);
     }
 
     @Transactional
-    public ApiResponse<EventResponse> openEvent(Long eventId) {
+    public EventResponse openEvent(Long eventId) {
         Event event = findEventById(eventId);
         event.open(); // 엔티티 내부 비즈니스 메서드 호출
-        return ApiResponse.success(EventResponse.from(event));
+        return EventResponse.from(event);
     }
 
     @Transactional
-    public ApiResponse<EventResponse> closeEvent(Long eventId) {
+    public EventResponse closeEvent(Long eventId) {
         Event event = findEventById(eventId);
         event.close();
-        return ApiResponse.success(EventResponse.from(event));
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    policyService.evictPolicyCache(eventId);
+                }
+            });
+        } else {
+            policyService.evictPolicyCache(eventId);
+        }
+        return EventResponse.from(event);
     }
 
     public List<EventListResponse> getOpenEvents() {
@@ -59,16 +70,15 @@ public class EventService {
                 .toList();
     }
 
-    public ApiResponse<EventResponse> getEvent(Long eventId) {
+    public EventResponse getEvent(Long eventId) {
         Event event = findEventById(eventId);
-        return ApiResponse.success(EventResponse.from(event));
+        return EventResponse.from(event);
     }
 
-    public ApiResponse<List<EventResponse>> getEvents() {
-        List<EventResponse> list = eventRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<EventResponse> getEvents() {
+        return eventRepository.findAllByOrderByCreatedAtDesc().stream()
                 .map(EventResponse::from)
                 .toList();
-        return ApiResponse.success(list);
     }
 
     private Event findEventById(Long eventId) {

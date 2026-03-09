@@ -19,26 +19,26 @@ public class EventController {
 
     @GetMapping
     public ApiResponse<List<EventResponse>> list() {
-        return eventService.getEvents();
+        return ApiResponse.success(eventService.getEvents());
     }
 
     @PostMapping
     public ApiResponse<EventResponse> create(@Valid @RequestBody EventCreateRequest request) {
-        return eventService.createEvent(request);
+        return ApiResponse.success(eventService.createEvent(request));
     }
 
     @GetMapping("/{eventId}")
     public ApiResponse<EventResponse> getEvent(@PathVariable Long eventId) {
-        return eventService.getEvent(eventId);
+        return ApiResponse.success(eventService.getEvent(eventId));
     }
 
     @PostMapping("/{eventId}/open")
     public ApiResponse<EventResponse> open(@PathVariable Long eventId) {
-        return eventService.openEvent(eventId);
+        return ApiResponse.success(eventService.openEvent(eventId));
     }
 
     @PostMapping("/{eventId}/close")
     public ApiResponse<EventResponse> close(@PathVariable Long eventId) {
-        return eventService.closeEvent(eventId);
+        return ApiResponse.success(eventService.closeEvent(eventId));
     }
 }

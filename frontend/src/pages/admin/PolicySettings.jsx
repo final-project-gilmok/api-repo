@@ -98,7 +98,7 @@ export default function PolicySettings() {
         setError('RPS, 동시 접속 수는 0 이상의 숫자여야 합니다.')
         return
       }
-      const version = await updatePolicy(eventId, {
+      const result = await updatePolicy(eventId, {
         admissionRps: rps,
         admissionConcurrency: concurrency,
         blockRules: displayToBlockRules(blockingRules),
@@ -106,7 +106,18 @@ export default function PolicySettings() {
         maxRequestsPerSecond: Number.isNaN(maxRps) || maxRps < 0 ? null : maxRps,
         blockDurationMinutes: Number.isNaN(blockDur) || blockDur < 0 ? null : blockDur,
       })
-      setPolicyVersion(version != null ? version : policyVersion)
+      const policy = result?.data ?? result
+      if (policy) {
+        setPolicyVersion(policy.policyVersion ?? policyVersion)
+        setAdmissionRps(String(policy.admissionRps ?? rps))
+        setAdmissionConcurrency(String(policy.admissionConcurrency ?? concurrency))
+        setGateMode(normalizeGateMode(policy.gateMode?.trim()))
+        setBlockingRules(blockRulesToDisplay(policy.blockRules))
+        setMaxRequestsPerSecond(String(policy.maxRequestsPerSecond ?? maxRps))
+        setBlockDurationMinutes(String(policy.blockDurationMinutes ?? blockDur))
+      } else {
+        setPolicyVersion(policyVersion)
+      }
       setNoPolicyYet(false)
     } catch (e) {
       setError(e.message || '정책 저장에 실패했습니다.')

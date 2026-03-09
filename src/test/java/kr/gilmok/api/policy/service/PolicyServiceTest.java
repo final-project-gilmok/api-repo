@@ -21,8 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-
-import jakarta.persistence.OptimisticLockException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.Optional;
 
@@ -176,9 +175,9 @@ class PolicyServiceTest {
 
             ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
 
-            Long version = policyService.updatePolicy(eventId, request, updatedByUserId);
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
 
-            assertThat(version).isEqualTo(1L);
+            assertThat(response.policyVersion()).isEqualTo(1L);
             verify(historyRepository, never()).save(any());
             verify(policyRepository).findByEventId(eventId);
             verify(policyRepository).saveAndFlush(policyCaptor.capture());
@@ -199,9 +198,9 @@ class PolicyServiceTest {
 
             ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
 
-            Long version = policyService.updatePolicy(eventId, request, updatedByUserId);
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
 
-            assertThat(version).isEqualTo(1L);
+            assertThat(response.policyVersion()).isEqualTo(1L);
             verify(historyRepository).save(any());
             verify(policyRepository).saveAndFlush(policyCaptor.capture());
             assertThat(policyCaptor.getValue().getUpdatedByUserId()).isEqualTo(updatedByUserId);
@@ -228,7 +227,7 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(20, 10, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(true);
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
-            when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new OptimisticLockException());
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new ObjectOptimisticLockingFailureException(Policy.class, 1L));
 
             assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
                     .isInstanceOf(CustomException.class)
