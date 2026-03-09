@@ -12,6 +12,7 @@ import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -78,26 +79,37 @@ public class AiPolicyRecommendationService {
     private void saveRecommendationToDb(Long eventId, Long adminUserId,
                                         Map<String, Object> snapshotData,
                                         AiPolicyRecommendationDto dto) {
-        try {
-            // Map과 DTO를 JSON 스트링으로 직렬화
-            String metricsJson = objectMapper.writeValueAsString(snapshotData);
-            String policyJson = objectMapper.writeValueAsString(dto);
 
+        // 1. 직렬화 (실패 시 AI002 예외)
+        String metricsJson;
+        String policyJson;
+        try {
+            metricsJson = objectMapper.writeValueAsString(snapshotData);
+            policyJson = objectMapper.writeValueAsString(dto);
+        } catch (JsonProcessingException e) {
+            log.error("AI 추천 직렬화 실패: eventId={}", eventId, e);
+            throw new CustomException(AiErrorCode.AI_SERIALIZATION_FAILED); // AI002
+        }
+
+        // 2. DB 저장 (실패해도 AI 응답은 이미 반환 예정 → 로그만 남김)
+        try {
             AiRecommendation entity = AiRecommendation.builder()
                     .eventId(eventId)
-                    .inputWindowSec(60) // 프롬프트 기준인 '최근 1분간'을 의미
+                    .inputWindowSec(60)
                     .metricsSnapshotJson(metricsJson)
                     .recommendedPolicyJson(policyJson)
                     .rationale(dto.rationale())
-                    .createdByUserId(adminUserId) // 파라미터로 받은 관리자 식별자
+                    .createdByUserId(adminUserId)
                     .build();
 
             aiRecommendationRepository.save(entity);
             log.info("AI recommendation saved to DB: eventId={}, adminId={}", eventId, adminUserId);
 
-        } catch (JsonProcessingException e) {
-            log.error("AI 추천 직렬화 실패: eventId={}", eventId, e);
-            throw new CustomException(AiErrorCode.AI_SERIALIZATION_FAILED); // AI002
+        } catch (DataAccessException e) {
+            // 규칙 준수: 에러코드로 의미를 명확히 하되, 전파는 하지 않음
+            CustomException customEx = new CustomException(AiErrorCode.AI_DB_SAVE_FAILED); // AI003
+            log.error("AI 추천 DB 저장 실패 [{}]: eventId={}",
+                    customEx.getErrorCode().getCode(), eventId, e);
         }
     }
 }
