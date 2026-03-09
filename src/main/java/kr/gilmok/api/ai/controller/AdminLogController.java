@@ -15,7 +15,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/admin/logs")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")  // 👉 핵심! 모든 프론트엔드의 접근을 허용합니다!
 public class AdminLogController {
 
     private final RequestLogRepository requestLogRepository;

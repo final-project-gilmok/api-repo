@@ -3,9 +3,12 @@ package kr.gilmok.api.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.gilmok.api.ai.dto.AiPolicyRecommendationDto;
+import kr.gilmok.api.ai.entity.AiErrorCode;
 import kr.gilmok.api.ai.entity.AiRecommendation;
 import kr.gilmok.api.ai.repository.AiRecommendationRepository;
 import kr.gilmok.api.queue.service.QueueService;
+import kr.gilmok.common.dto.ApiResponse;
+import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -53,13 +56,20 @@ public class AiPolicyRecommendationService {
         log.info("Sending prompt to AI: {}", promptMessage);
 
         // 4. AI 호출
-        AiPolicyRecommendationDto responseDto = chatClient.prompt()
-                .system("너는 트래픽 제어 시스템의 수석 SRE 엔지니어 봇이야.")
-                .user(promptMessage)
-                .call()
-                .entity(AiPolicyRecommendationDto.class);
+        AiPolicyRecommendationDto responseDto;
+        try {
+            responseDto = chatClient.prompt()
+                    .system("너는 트래픽 제어 시스템의 수석 SRE 엔지니어 봇이야.")
+                    .user(promptMessage)
+                    .call()
+                    .entity(AiPolicyRecommendationDto.class);
+        } catch (Exception e) {
+            log.error("AI 호출 실패: eventId={}", eventId, e);
+            throw new CustomException(AiErrorCode.AI_RECOMMENDATION_FAILED); // AI001
+        }
 
         // 5. DB 저장
+        // ✅ DB 저장 실패 → AI002 (saveRecommendationToDb 내부에서 처리)
         saveRecommendationToDb(eventId, adminUserId, snapshotData, responseDto);
 
         return responseDto;
@@ -86,8 +96,8 @@ public class AiPolicyRecommendationService {
             log.info("AI recommendation saved to DB: eventId={}, adminId={}", eventId, adminUserId);
 
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize AI recommendation data for eventId={}", eventId, e);
-            throw new RuntimeException("AI 추천 결과 직렬화 실패", e);
+            log.error("AI 추천 직렬화 실패: eventId={}", eventId, e);
+            throw new CustomException(AiErrorCode.AI_SERIALIZATION_FAILED); // AI002
         }
     }
 }
