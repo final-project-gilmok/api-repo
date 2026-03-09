@@ -10,6 +10,7 @@ import kr.gilmok.api.token.service.TokenService;
 import kr.gilmok.common.dto.ApiResponse;
 import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,6 +26,9 @@ public class ReservationController {
     private final ReservationService reservationService;
     private final QueueService queueService;
     private final TokenService tokenService;
+
+    @Value("${app.admitted-ttl-seconds}")
+    private long admittedTtlSeconds;
 
     @PostMapping
     public ApiResponse<ReservationResponse> create(
@@ -42,7 +46,7 @@ public class ReservationController {
         String token = tokenService.issueAdmissionToken(
                 String.valueOf(request.eventId()), principal.user().id(), principal.getUsername(), 0L);
 
-        ResponseCookie cookie = createAdmissionCookie(token, 600); // 10분 유효
+        ResponseCookie cookie = createAdmissionCookie(token, admittedTtlSeconds);
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ApiResponse.success(res);
