@@ -1,6 +1,7 @@
 package kr.gilmok.api.reservation.scheduler;
 
 import kr.gilmok.api.reservation.entity.Reservation;
+import kr.gilmok.api.reservation.entity.ReservationStatus;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,17 +19,22 @@ public class HoldingExpiryProcessor {
 
     @Transactional
     public void processSingleExpiry(Reservation reservation) {
-        reservation.cancel();
+        Reservation managed = reservationRepository.findById(reservation.getId()).orElse(null);
+        if (managed == null || managed.getStatus() != ReservationStatus.HOLDING) {
+            return;
+        }
+
+        managed.cancel();
         try {
             seatLockRedisRepository.unlockAndRestore(
-                reservation.getEvent().getId(),
-                reservation.getSeat().getId(),
-                reservation.getUserId()
+                managed.getEvent().getId(),
+                managed.getSeat().getId(),
+                managed.getUserId()
             );
         } catch (Exception e) {
-            log.warn("Redis restore failed: code={}", reservation.getReservationCode(), e);
+            log.error("Redis restore failed: code={}", managed.getReservationCode(), e);
         }
         log.info("HOLDING expired → CANCELLED: code={}, userId={}",
-            reservation.getReservationCode(), reservation.getUserId());
+            managed.getReservationCode(), managed.getUserId());
     }
 }
