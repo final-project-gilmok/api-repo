@@ -1,6 +1,7 @@
 package kr.gilmok.api.reservation.service;
 
 import io.jsonwebtoken.Claims;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.repository.EventRepository;
@@ -237,6 +238,10 @@ class ReservationServiceTest {
             when(claims.get("id", Long.class)).thenReturn(1L);
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             when(jwtProvider.getClaims(anyString())).thenReturn(claims);
+
+            Counter counter = mock(Counter.class);
+            when(meterRegistry.counter(eq("reservation.success.total"), eq("eventId"), eq("1")))
+                    .thenReturn(counter);
 
             // when
             ReservationResponse response = reservationService.confirmReservation(1L, reservation.getReservationCode(),
