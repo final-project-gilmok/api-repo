@@ -1,8 +1,7 @@
 package kr.gilmok.api.reservation.service;
 
-import io.micrometer.core.instrument.Counter;
+import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
@@ -116,6 +115,22 @@ public class ReservationService {
 
         Reservation reservation = reservationRepository.findByReservationCodeForUpdate(reservationCode)
                 .orElseThrow(() -> new CustomException(ReservationErrorCode.RESERVATION_NOT_FOUND));
+
+        // 토큰 클레임과 예약 정보 대조
+        Claims claims = jwtProvider.getClaims(admissionToken);
+        String tokenEventId = claims.get("evt", String.class);
+        Long tokenUserId = claims.get("id", Long.class);
+
+        if (tokenEventId == null || !tokenEventId.equals(String.valueOf(reservation.getEvent().getId()))) {
+            log.warn("[Security] AdmissionToken eventId mismatch. token: {}, reservation: {}", tokenEventId,
+                    reservation.getEvent().getId());
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
+
+        if (tokenUserId == null || !tokenUserId.equals(userId)) {
+            log.warn("[Security] AdmissionToken userId mismatch. token: {}, request: {}", tokenUserId, userId);
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
 
         if (!reservation.getUserId().equals(userId)) {
             throw new CustomException(ReservationErrorCode.UNAUTHORIZED);
