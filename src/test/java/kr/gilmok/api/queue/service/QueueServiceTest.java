@@ -1,15 +1,14 @@
 package kr.gilmok.api.queue.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
-import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.token.service.TokenService;
-import kr.gilmok.common.exception.CustomException;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,10 +21,10 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class QueueServiceTest {
@@ -46,7 +45,7 @@ class QueueServiceTest {
 
     @BeforeEach
     void setUp() {
-        queueService = new QueueService(tokenService, queueRedisRepository, policyCacheRepository, meterRegistry);
+        queueService = new QueueService(queueRedisRepository, policyCacheRepository, meterRegistry);
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
@@ -72,8 +71,8 @@ class QueueServiceTest {
         // given
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
-        )).willReturn(Arrays.asList(1L, "new-queue-key", 0L));
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
+                .willReturn(Arrays.asList(1L, "new-queue-key", 0L));
 
         // when
         QueueRegisterResponse response = queueService.register(USER_ID, request);
@@ -91,8 +90,8 @@ class QueueServiceTest {
         // given
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
-        )).willReturn(Arrays.asList(0L, "existing-queue-key", 5L));
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
+                .willReturn(Arrays.asList(0L, "existing-queue-key", 5L));
 
         // when
         QueueRegisterResponse response = queueService.register(USER_ID, request);
@@ -110,8 +109,8 @@ class QueueServiceTest {
         // given
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
-                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()
-        )).willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
+                .willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
 
         // when
         QueueRegisterResponse response = queueService.register(USER_ID, request);
@@ -130,7 +129,7 @@ class QueueServiceTest {
         // given — statusCode=1
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(1L, -1L, 0L, 0L));
-        given(tokenService.issueAdmissionToken(eq("event1"), eq(USER_ID), eq("testuser"), eq(0L)))
+        given(tokenService.issueAdmissionToken(eq("event1"), anyString(), eq(USER_ID), eq("testuser"), eq(0L)))
                 .willReturn("test-admission-token");
 
         // when
@@ -253,11 +252,12 @@ class QueueServiceTest {
     @Test
     @DisplayName("입장 사이클 - 입장 성공 시 recordAdmissionRate와 updateSessions가 호출된다")
     void runAdmissionCycle_admitsUsers_recordsAndUpdatesSessions() {
-        // given — 결과: expired=2, cleaned=1, admitted=3, consumed=3, left=7, waiting=5, admittedSize=3, members
+        // given — 결과: expired=2, cleaned=1, admitted=3, consumed=3, left=7, waiting=5,
+        // admittedSize=3, members
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
-        )).willReturn(Arrays.asList(2L, 1L, 3L, 3L, 7L, 5L, 3L, "m1", "m2", "m3"));
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)))
+                .willReturn(Arrays.asList(2L, 1L, 3L, 3L, 7L, 5L, 3L, "m1", "m2", "m3"));
 
         // when
         queueService.runAdmissionCycle("event1", 10, 0);
@@ -273,8 +273,8 @@ class QueueServiceTest {
         // given — 모두 0
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
-        )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 5L, 0L));
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)))
+                .willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 5L, 0L));
 
         // when
         queueService.runAdmissionCycle("event1", 10, 0);
@@ -290,8 +290,8 @@ class QueueServiceTest {
         // given
         given(queueRedisRepository.runAdmissionCycle(
                 eq("event1"), anyLong(), anyLong(),
-                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)
-        )).willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 42L, 7L));
+                eq(300_000L), eq(180_000L), eq(100), eq(100), eq(0)))
+                .willReturn(Arrays.asList(0L, 0L, 0L, 0L, 10L, 42L, 7L));
 
         // when
         queueService.runAdmissionCycle("event1", 10, 0);

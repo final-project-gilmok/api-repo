@@ -1,5 +1,7 @@
 package kr.gilmok.api.reservation.service;
 
+import io.jsonwebtoken.Claims;
+import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.event.entity.Event;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
@@ -14,9 +16,6 @@ import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
-import io.jsonwebtoken.Claims;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -234,6 +233,7 @@ class ReservationServiceTest {
 
             Claims claims = mock(Claims.class);
             when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
             when(claims.get("id", Long.class)).thenReturn(1L);
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             when(jwtProvider.getClaims(anyString())).thenReturn(claims);
@@ -278,6 +278,7 @@ class ReservationServiceTest {
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             Claims claims = mock(Claims.class);
             when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
             when(claims.get("id", Long.class)).thenReturn(1L);
             when(jwtProvider.getClaims(anyString())).thenReturn(claims);
 
