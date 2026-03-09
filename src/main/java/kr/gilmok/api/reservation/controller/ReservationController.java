@@ -47,8 +47,8 @@ public class ReservationController {
                 String.valueOf(request.eventId()), res.reservationCode(), principal.user().id(),
                 principal.getUsername(), 0L);
 
-        ResponseCookie cookie = createAdmissionCookie(token, admittedTtlSeconds,
-                "/reservations/" + res.reservationCode() + "/confirm");
+        ResponseCookie cookie = createAdmissionCookie("admissionToken_" + res.reservationCode(), token,
+                admittedTtlSeconds, "/");
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ApiResponse.success(res);
@@ -58,14 +58,14 @@ public class ReservationController {
     public ApiResponse<ReservationResponse> confirm(
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable String code,
-            @CookieValue(value = "admissionToken", required = false) String admissionToken,
+            @RequestAttribute(value = "admissionToken") String admissionToken,
             HttpServletResponse response) {
 
         // 1. 예약 확정 (내부에서 토큰 검증 수행)
         ReservationResponse res = reservationService.confirmReservation(principal.user().id(), code, admissionToken);
 
         // 2. 확정 성공 시 쿠키 만료
-        ResponseCookie cookie = createAdmissionCookie("", 0, "/reservations/" + code + "/confirm");
+        ResponseCookie cookie = createAdmissionCookie("admissionToken_" + code, "", 0, "/");
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ApiResponse.success(res);
@@ -91,8 +91,8 @@ public class ReservationController {
         return ApiResponse.success(reservationService.getMyReservations(principal.user().id()));
     }
 
-    private ResponseCookie createAdmissionCookie(String value, long maxAgeSeconds, String path) {
-        return ResponseCookie.from("admissionToken", value)
+    private ResponseCookie createAdmissionCookie(String name, String value, long maxAgeSeconds, String path) {
+        return ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(false)
                 .path(path)

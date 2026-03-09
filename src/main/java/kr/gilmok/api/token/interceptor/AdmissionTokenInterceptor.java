@@ -59,6 +59,7 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
         // 다음 필터/컨트롤러에서 사용할 수 있도록 검증된 데이터를 Request에 담아줌
         request.setAttribute("admittedEventId", claims.get("evt"));
         request.setAttribute("admittedUserId", claims.get("sub"));
+        request.setAttribute("admissionToken", admissionToken);
 
         log.info("[AdmissionInterceptor] 입장 통과 - eventId: {}, userId: {}", claims.get("evt"), claims.get("sub"));
 
@@ -66,9 +67,17 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
     }
 
     private String resolveToken(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String[] parts = uri.split("/");
+        if (parts.length < 3) {
+            return null;
+        }
+        String code = parts[2];
+        String targetCookieName = "admissionToken_" + code;
+
         if (request.getCookies() != null) {
             return Arrays.stream(request.getCookies())
-                    .filter(c -> "admissionToken".equals(c.getName()))
+                    .filter(c -> targetCookieName.equals(c.getName()))
                     .map(Cookie::getValue)
                     .findFirst()
                     .orElse(null);
