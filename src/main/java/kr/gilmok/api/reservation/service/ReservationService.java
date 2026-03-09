@@ -88,23 +88,23 @@ public class ReservationService {
 
         Reservation saved;
         try {
-        // 예약 생성 (HOLDING 상태)
+            // 예약 생성 (HOLDING 상태)
             Reservation reservation = Reservation.builder()
-            .event(event)
-            .seat(seat).userId(userId)
-            .quantity(request.quantity())
-            .build();
+                    .event(event)
+                    .seat(seat).userId(userId)
+                    .quantity(request.quantity())
+                    .build();
             saved = reservationRepository.save(reservation);
         } catch (Exception e) {
-           // DB 저장 실패 시 Redis 잠금 해제
-           seatLockRedisRepository.unlockAndRestore(request.eventId(), request.seatId(), userId);
+            // DB 저장 실패 시 Redis 잠금 해제
+            seatLockRedisRepository.unlockAndRestore(request.eventId(), request.seatId(), userId);
             throw e;
         }
 
         log.info("Reservation created: code={}, eventId={}, seatId={}, userId={}, qty={}",
                 saved.getReservationCode(), request.eventId(), request.seatId(), userId, request.quantity());
 
-        return ReservationResponse.from(saved);
+        return ReservationResponse.from(saved, seatLockTtlSeconds);
     }
 
     @Transactional
@@ -130,10 +130,9 @@ public class ReservationService {
         }
 
         if (reservation.getCreatedAt().plusSeconds(seatLockTtlSeconds)
-            .isBefore(java.time.LocalDateTime.now())) {
-            throw new CustomException(ReservationErrorCode
-                    .RESERVATION_EXPIRED);
-            }
+                .isBefore(java.time.LocalDateTime.now())) {
+            throw new CustomException(ReservationErrorCode.RESERVATION_EXPIRED);
+        }
 
         // MySQL 비관적 잠금으로 좌석 예약 확정
         Seat seat = seatRepository.findByIdForUpdate(reservation.getSeat().getId())
@@ -144,19 +143,17 @@ public class ReservationService {
 
         // Redis 잠금 해제
         seatLockRedisRepository.unlockAndRestore(
-                reservation.getEvent().getId(), seat.getId(), userId
-        );
+                reservation.getEvent().getId(), seat.getId(), userId);
         // 확정 후 Redis 잔여석을 DB 기준으로 재동기화
         seatLockRedisRepository.initAvailable(
-                reservation.getEvent().getId(), seat.getId(), seat.getAvailableCount()
-        );
+                reservation.getEvent().getId(), seat.getId(), seat.getAvailableCount());
 
         log.info("Reservation confirmed: code={}", reservationCode);
 
         meterRegistry.counter("reservation.success.total", "eventId", String.valueOf(reservation.getEvent().getId()))
                 .increment();
 
-        return ReservationResponse.from(reservation);
+        return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
 
     @Transactional
@@ -181,26 +178,23 @@ public class ReservationService {
                     .orElseThrow(() -> new CustomException(ReservationErrorCode.SEAT_NOT_FOUND));
             seat.cancelReservation(reservation.getQuantity());
             seatLockRedisRepository.initAvailable(
-                    reservation.getEvent().getId(), seat.getId(), seat.getAvailableCount()
-            );
+                    reservation.getEvent().getId(), seat.getId(), seat.getAvailableCount());
         } else {
             // HOLDING 상태 취소: Redis 잠금 해제 + 잔여석 복구
             seatLockRedisRepository.unlockAndRestore(
                     reservation.getEvent().getId(),
                     reservation.getSeat().getId(),
-                    userId
-            );
+                    userId);
         }
 
         // 대기열 admitted 정리 → 재입장 가능하도록
         queueRedisRepository.removeAdmittedUser(
                 String.valueOf(reservation.getEvent().getId()),
-                String.valueOf(reservation.getUserId())
-        );
+                String.valueOf(reservation.getUserId()));
 
         log.info("Reservation cancelled: code={}", reservationCode);
 
-        return ReservationResponse.from(reservation);
+        return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
 
     public ReservationResponse getReservation(Long userId, String reservationCode) {
@@ -211,20 +205,20 @@ public class ReservationService {
             throw new CustomException(ReservationErrorCode.UNAUTHORIZED);
         }
 
-        return ReservationResponse.from(reservation);
+        return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
 
     public List<ReservationResponse> getMyReservations(Long userId) {
         return reservationRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
-                .map(ReservationResponse::from)
+                .map(r -> ReservationResponse.from(r, seatLockTtlSeconds))
                 .toList();
     }
 
     public List<ReservationResponse> getReservationsByEvent(Long eventId) {
         return reservationRepository.findByEventIdOrderByCreatedAtDesc(eventId)
                 .stream()
-                .map(ReservationResponse::from)
+                .map(r -> ReservationResponse.from(r, seatLockTtlSeconds))
                 .toList();
     }
 
@@ -236,7 +230,6 @@ public class ReservationService {
                 reservationRepository.countByEventIdAndStatus(eventId, ReservationStatus.CANCELLED),
                 reservationRepository.sumQuantityByEventIdAndStatus(eventId, ReservationStatus.HOLDING),
                 reservationRepository.sumQuantityByEventIdAndStatus(eventId, ReservationStatus.CONFIRMED),
-                reservationRepository.sumQuantityByEventIdAndStatus(eventId, ReservationStatus.CANCELLED)
-        );
+                reservationRepository.sumQuantityByEventIdAndStatus(eventId, ReservationStatus.CANCELLED));
     }
 }
