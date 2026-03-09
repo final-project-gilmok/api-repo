@@ -46,7 +46,8 @@ public class ReservationController {
         String token = tokenService.issueAdmissionToken(
                 String.valueOf(request.eventId()), principal.user().id(), principal.getUsername(), 0L);
 
-        ResponseCookie cookie = createAdmissionCookie(token, admittedTtlSeconds);
+        ResponseCookie cookie = createAdmissionCookie(token, admittedTtlSeconds,
+                "/reservations/" + res.reservationCode() + "/confirm");
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ApiResponse.success(res);
@@ -63,7 +64,7 @@ public class ReservationController {
         ReservationResponse res = reservationService.confirmReservation(principal.user().id(), code, admissionToken);
 
         // 2. 확정 성공 시 쿠키 만료
-        ResponseCookie cookie = createAdmissionCookie("", 0);
+        ResponseCookie cookie = createAdmissionCookie("", 0, "/reservations/" + code + "/confirm");
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return ApiResponse.success(res);
@@ -89,11 +90,11 @@ public class ReservationController {
         return ApiResponse.success(reservationService.getMyReservations(principal.user().id()));
     }
 
-    private ResponseCookie createAdmissionCookie(String value, long maxAgeSeconds) {
+    private ResponseCookie createAdmissionCookie(String value, long maxAgeSeconds, String path) {
         return ResponseCookie.from("admissionToken", value)
                 .httpOnly(true)
                 .secure(false)
-                .path("/")
+                .path(path)
                 .maxAge(maxAgeSeconds)
                 .sameSite("Lax")
                 .build();
