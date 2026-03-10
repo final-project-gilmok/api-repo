@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: api
+  profiles:
+    active: dev # 기본은 dev로 실행 (운영에선 -Dspring.profiles.active=prod 로 덮어쓰기)
+
+server:
+  port: 8081
+
+# 큐 관련 설정도 공통이라면 여기에 (환경별로 다르면 아래로 이동)
+queue:
+  admission-rps: 10
+  default-event-id: 1
+  admitted-ttl-seconds: 300
+  grace-period-seconds: 180
+
+reservation:
+  seat-lock-ttl-seconds: 300
+  max-quantity: 4
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics # 메트릭은 항상 노출

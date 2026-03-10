@@ -1,0 +1,52 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    # [수정] URL을 조립하지 않고, 환경변수(DB_URL)를 그대로 사용
+    # GitHub Secrets의 DB_URL에 "jdbc:mysql://..." 전체가 들어있어야 함
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # [추가] Redis 설정 (운영 환경)
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true} # 기본값 true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # 운영에선 스키마 변경 금지
+    properties:
+      hibernate:
+        format_sql: false # 운영 로그 깔끔하게
+        show_sql: false   # 쿼리 로그도 끄는 것 권장 (성능/보안)
+
+  ai:
+    google:
+      genai:
+        project-id: ${GEMINI_PROJECT_ID}
+        api-key: ${GEMINI_API_KEY}
+        chat:
+          options:
+            model: "gemini-2.0-flash"
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+  admitted-ttl-seconds: ${ADMITTED_TTL_SECONDS:300}
+
+metrics:
+  prometheus:
+    url: ${PROMETHEUS_URL:http://prometheus:9090}
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://tempo:4317
