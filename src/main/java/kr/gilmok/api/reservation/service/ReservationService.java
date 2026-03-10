@@ -56,7 +56,7 @@ public class ReservationService {
         }
 
         // 대기열 통과(ADMITTABLE) 검증
-
+        String eventIdStr = String.valueOf(request.eventId());
         Long queueOwner = queueRedisRepository.getQueueOwnerUserId(eventIdStr, request.queueKey());
         if (queueOwner == null || !queueOwner.equals(userId)) {
             throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
