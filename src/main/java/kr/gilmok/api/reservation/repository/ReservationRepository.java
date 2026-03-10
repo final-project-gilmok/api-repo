@@ -38,4 +38,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     @Query("SELECT COALESCE(SUM(r.quantity), 0) FROM Reservation r WHERE r.event.id = :eventId AND r.status = :status")
     long sumQuantityByEventIdAndStatus(@Param("eventId") Long eventId, @Param("status") ReservationStatus status);
+
+    @Query("SELECT r FROM Reservation r " +
+       "JOIN FETCH r.event " +
+       "JOIN FETCH r.seat " +
+       "WHERE r.status = :status AND r.createdAt < :cutoff")
+    List<Reservation> findExpiredHolding(
+        @Param("status") ReservationStatus status,
+        @Param("cutoff") LocalDateTime cutoff
+    );
+    
 }
