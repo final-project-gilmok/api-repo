@@ -54,12 +54,27 @@ jobs:
           context: ./frontend
           push: true
           tags: ${{ env.IMAGE_NAME }}/frontend:latest
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_AUTH_BASE_URL=${{ secrets.VITE_AUTH_BASE_URL }}
+            VITE_GRAFANA_BASE_URL=${{ secrets.VITE_GRAFANA_BASE_URL }}
+            VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
-      - name: Trigger Deploy Repo
+      - name: Trigger Deploy Repo (Backend)
         if: success()
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITOPS_TOKEN }}
           repository: Final-project-gilmok/deploy-repo
           event-type: update-image
-          client-payload: '{"image_tag": "latest", "image_url": "${{ env.IMAGE_NAME }}", "service_name": "api-server"}'
+          client-payload: '{"image_tag": "latest", "service_name": "api-server"}'
+
+      # ✅ 추가
+      - name: Trigger Deploy Repo (Frontend)
+        if: success()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          repository: Final-project-gilmok/deploy-repo
+          event-type: update-image
+          client-payload: '{"image_tag": "latest", "service_name": "frontend-server"}'
