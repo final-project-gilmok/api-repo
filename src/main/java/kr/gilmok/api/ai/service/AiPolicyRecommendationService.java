@@ -70,7 +70,7 @@ public class AiPolicyRecommendationService {
         }
 
         // 5. DB 저장
-        // ✅ DB 저장 실패 → AI002 (saveRecommendationToDb 내부에서 처리)
+        // ✅ 직렬화 실패 → AI002 (예외 전파), DB 저장 실패 → AI003 (로그만, 예외 미전파)
         saveRecommendationToDb(eventId, adminUserId, snapshotData, responseDto);
 
         return responseDto;
