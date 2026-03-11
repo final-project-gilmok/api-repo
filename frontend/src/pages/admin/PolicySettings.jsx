@@ -13,24 +13,6 @@ function normalizeGateMode(value) {
   return GATE_MODE_OPTIONS.some((opt) => opt.value === value) ? value : DEFAULT_GATE_MODE
 }
 
-function blockRulesToDisplay(blockRules) {
-  if (!blockRules) return ''
-  const { ipPattern, userAgentPattern } = blockRules
-  const parts = [ipPattern, userAgentPattern].filter(Boolean)
-  return parts.join(', ')
-}
-
-function displayToBlockRules(value) {
-  const trimmed = (value || '').trim()
-  if (!trimmed) return { ipPattern: null, userAgentPattern: null, rateLimitKey: null }
-  const parts = trimmed.split(',').map((s) => s.trim()).filter(Boolean)
-  return {
-    ipPattern: parts[0] || null,
-    userAgentPattern: parts[1] || null,
-    rateLimitKey: null,
-  }
-}
-
 export default function PolicySettings() {
   const { eventId } = useParams()
 
@@ -44,7 +26,8 @@ export default function PolicySettings() {
   const [admissionRps, setAdmissionRps] = useState('100')
   const [admissionConcurrency, setAdmissionConcurrency] = useState('50')
   const [gateMode, setGateMode] = useState('ROUTING_ENABLED')
-  const [blockingRules, setBlockingRules] = useState('')
+  const [ipPattern, setIpPattern] = useState('')
+  const [userAgentPattern, setUserAgentPattern] = useState('')
   const [maxRequestsPerSecond, setMaxRequestsPerSecond] = useState('100')
   const [blockDurationMinutes, setBlockDurationMinutes] = useState('10')
 
@@ -57,7 +40,8 @@ export default function PolicySettings() {
     setAdmissionRps('100')
     setAdmissionConcurrency('50')
     setGateMode('ROUTING_ENABLED')
-    setBlockingRules('')
+    setIpPattern('')
+    setUserAgentPattern('')
     setMaxRequestsPerSecond('100')
     setBlockDurationMinutes('10')
     getPolicy(eventId)
@@ -66,7 +50,10 @@ export default function PolicySettings() {
           setAdmissionRps(String(data.admissionRps ?? 100))
           setAdmissionConcurrency(String(data.admissionConcurrency ?? 50))
           setGateMode(normalizeGateMode(data.gateMode?.trim()))
-          setBlockingRules(blockRulesToDisplay(data.blockRules))
+          if (data.blockRules) {
+            setIpPattern(data.blockRules.ipPattern || '')
+            setUserAgentPattern(data.blockRules.userAgentPattern || '')
+          }
           setMaxRequestsPerSecond(String(data.maxRequestsPerSecond ?? 100))
           setBlockDurationMinutes(String(data.blockDurationMinutes ?? 10))
           setPolicyVersion(data.policyVersion ?? null)
@@ -101,7 +88,11 @@ export default function PolicySettings() {
       const result = await updatePolicy(eventId, {
         admissionRps: rps,
         admissionConcurrency: concurrency,
-        blockRules: displayToBlockRules(blockingRules),
+        blockRules: {
+          ipPattern: ipPattern.trim() || null,
+          userAgentPattern: userAgentPattern.trim() || null,
+          rateLimitKey: null,
+        },
         gateMode: normalizeGateMode(gateMode?.trim()),
         maxRequestsPerSecond: Number.isNaN(maxRps) || maxRps < 0 ? null : maxRps,
         blockDurationMinutes: Number.isNaN(blockDur) || blockDur < 0 ? null : blockDur,
@@ -112,7 +103,10 @@ export default function PolicySettings() {
         setAdmissionRps(String(policy.admissionRps ?? rps))
         setAdmissionConcurrency(String(policy.admissionConcurrency ?? concurrency))
         setGateMode(normalizeGateMode(policy.gateMode?.trim()))
-        setBlockingRules(blockRulesToDisplay(policy.blockRules))
+        if (policy.blockRules) {
+          setIpPattern(policy.blockRules.ipPattern || '')
+          setUserAgentPattern(policy.blockRules.userAgentPattern || '')
+        }
         setMaxRequestsPerSecond(String(policy.maxRequestsPerSecond ?? maxRps))
         setBlockDurationMinutes(String(policy.blockDurationMinutes ?? blockDur))
       } else {
@@ -200,21 +194,31 @@ export default function PolicySettings() {
                 </p>
               </div>
 
-              <h3 className="h6 fw-semibold mb-2">고급 정책 (선택)</h3>
-              <p className="text-muted small mb-3">차단 규칙 및 매크로 방어 설정입니다.</p>
+              <h3 className="h6 fw-semibold mb-2">고급 정책 (차단 규칙)</h3>
+              <p className="text-muted small mb-3">IP 또는 User-Agent 패턴을 기반으로 트래픽을 차단합니다. (정규식 지원)</p>
 
               <div className="mb-3">
-                <label className="form-label">차단 규칙 (IP, User-Agent)</label>
-                <textarea
+                <label className="form-label">차단할 IP 패턴</label>
+                <input
+                  type="text"
                   className="form-control"
-                  rows={3}
-                  value={blockingRules}
-                  onChange={(e) => setBlockingRules(e.target.value)}
-                  placeholder="192.168.1.10, BadBot"
+                  value={ipPattern}
+                  onChange={(e) => setIpPattern(e.target.value)}
+                  placeholder="예: 1.2.3.4 또는 ^192\.168\..*"
                 />
-                <p className="form-text small text-muted">
-                  쉼표로 구분: 첫 번째는 IP 패턴, 두 번째는 User-Agent 패턴. 정규식을 사용합니다.
-                </p>
+                <p className="form-text small text-muted">특정 IP나 대역을 차단합니다. 비워두면 체크하지 않습니다.</p>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">차단할 User-Agent 패턴</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={userAgentPattern}
+                  onChange={(e) => setUserAgentPattern(e.target.value)}
+                  placeholder="예: BadBot|Scraper|Python-requests"
+                />
+                <p className="form-text small text-muted">브라우저나 봇 정보를 기반으로 차단합니다. 비워두면 체크하지 않습니다.</p>
               </div>
 
               <div className="mb-3">
