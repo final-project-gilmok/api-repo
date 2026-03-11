@@ -204,15 +204,17 @@ export default function PolicySettings() {
               <p className="text-muted small mb-3">차단 규칙 및 매크로 방어 설정입니다.</p>
 
               <div className="mb-3">
-                <label className="form-label">차단 규칙 (IP, UserAgent)</label>
+                <label className="form-label">차단 규칙 (IP, User-Agent)</label>
                 <textarea
                   className="form-control"
                   rows={3}
                   value={blockingRules}
                   onChange={(e) => setBlockingRules(e.target.value)}
-                  placeholder="192.168.1.10, UserAgent: BadBot"
+                  placeholder="192.168.1.10, BadBot"
                 />
-                <p className="form-text small text-muted">쉼표로 구분: 첫 번째는 IP 패턴, 두 번째는 User-Agent 패턴.</p>
+                <p className="form-text small text-muted">
+                  쉼표로 구분: 첫 번째는 IP 패턴, 두 번째는 User-Agent 패턴. 정규식을 사용합니다.
+                </p>
               </div>
 
               <div className="mb-3">
