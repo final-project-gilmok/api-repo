@@ -196,9 +196,10 @@ public class PolicyFilter extends OncePerRequestFilter {
                 return false;
             }
         }
+        final Pattern finalP = p;
         // ReDoS 방지: 타임아웃 내에서만 매칭 수행
         try {
-            return REGEX_MATCH_EXECUTOR.submit(() -> p.matcher(input).find())
+            return REGEX_MATCH_EXECUTOR.submit(() -> finalP.matcher(input).find())
                     .get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             log.warn("[PolicyFilter] Regex match timeout (ReDoS?), regex length={}, input length={}", regex.length(), input != null ? input.length() : 0);
