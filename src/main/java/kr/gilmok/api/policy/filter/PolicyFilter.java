@@ -20,12 +20,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -48,14 +51,20 @@ public class PolicyFilter extends OncePerRequestFilter {
             }
     );
 
-    private static final Set<String> INVALID_PATTERNS = Collections.newSetFromMap(
-            new LinkedHashMap<String, Boolean>(100, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
-                    return size() > 100;
-                }
-            }
+    private static final Set<String> INVALID_PATTERNS = Collections.synchronizedSet(
+            Collections.newSetFromMap(
+                    new LinkedHashMap<String, Boolean>(100, 0.75f, true) {
+                        @Override
+                        protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                            return size() > 100;
+                        }
+                    }
+            )
     );
+
+    /** ReDoS 방지: 정규식 매칭 타임아웃(ms). 초과 시 매칭 실패로 간주. */
+    private static final long REGEX_MATCH_TIMEOUT_MS = 200;
+    private static final ExecutorService REGEX_MATCH_EXECUTOR = Executors.newFixedThreadPool(4);
 
     private final PolicyCacheRepository policyCacheRepository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -156,7 +165,9 @@ public class PolicyFilter extends OncePerRequestFilter {
         try {
             byte[] body = ((CachedBodyHttpServletRequestWrapper) request).getInputStream().readAllBytes();
             JsonNode node = objectMapper.readTree(body);
-            if (node.has("eventId")) return node.get("eventId").asLong();
+            if (node.has("eventId") && node.get("eventId").isNumber()) {
+                return node.get("eventId").asLong();
+            }
         } catch (Exception ignored) {}
         return null;
     }
@@ -185,7 +196,17 @@ public class PolicyFilter extends OncePerRequestFilter {
                 return false;
             }
         }
-        return p.matcher(input).find();
+        // ReDoS 방지: 타임아웃 내에서만 매칭 수행
+        try {
+            return REGEX_MATCH_EXECUTOR.submit(() -> p.matcher(input).find())
+                    .get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            log.warn("[PolicyFilter] Regex match timeout (ReDoS?), regex length={}, input length={}", regex.length(), input != null ? input.length() : 0);
+            return false;
+        } catch (Exception e) {
+            log.debug("[PolicyFilter] Regex match error", e);
+            return false;
+        }
     }
 
     private String resolveClientKey(String clientIp) {
