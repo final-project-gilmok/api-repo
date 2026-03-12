@@ -7,6 +7,7 @@ import kr.gilmok.api.queue.exception.QueueErrorCode;
 import kr.gilmok.common.dto.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.MediaType;
@@ -59,9 +60,11 @@ public class QueueRateLimitInterceptor implements HandlerInterceptor {
                 writeErrorResponse(response);
                 return false;
             }
+        } catch (RedisConnectionFailureException e) {
+            log.warn("Rate limit check failed - Redis connection failure (fail-open): ip={}", clientIp);
         } catch (Exception e) {
-            // Fail-open: Redis 장애 시 rate limit 우회
-            log.warn("Rate limit check failed (fail-open): ip={}, error={}", clientIp, e.getMessage());
+            log.warn("Rate limit check failed (fail-open): ip={}, error={}, type={}",
+                    clientIp, e.getMessage(), e.getClass().getSimpleName());
         }
 
         return true;
