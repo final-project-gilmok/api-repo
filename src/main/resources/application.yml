@@ -3,16 +3,27 @@ spring:
     name: api
   profiles:
     active: dev # 기본은 dev로 실행 (운영에선 -Dspring.profiles.active=prod 로 덮어쓰기)
+  data:
+    redis:
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
 
 server:
   port: 8081
 
 # 큐 관련 설정도 공통이라면 여기에 (환경별로 다르면 아래로 이동)
 queue:
-  admission-rps: 10
+  admission-rps: ${QUEUE_ADMISSION_RPS:10}
   default-event-id: 1
-  admitted-ttl-seconds: 300
-  grace-period-seconds: 180
+  admitted-ttl-seconds: ${QUEUE_ADMITTED_TTL_SECONDS:300}
+  grace-period-seconds: ${QUEUE_GRACE_PERIOD_SECONDS:180}
+  rate-limit:
+    requests-per-second: ${QUEUE_RATE_LIMIT_RPS:10}
+    window-ms: ${QUEUE_RATE_LIMIT_WINDOW_MS:1000}
 
 reservation:
   seat-lock-ttl-seconds: 300

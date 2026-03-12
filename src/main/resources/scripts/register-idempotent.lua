@@ -71,6 +71,7 @@ end
 redis.call('ZADD', queueKey, 'NX', score, newQueueKeyVal)
 redis.call('HSET', userIndexKey, userId, newQueueKeyVal)
 redis.call('ZADD', heartbeatsKey, nowMs, newQueueKeyVal)
+redis.call('EXPIRE', heartbeatsKey, sessionTtlSec)
 
 -- Ensure session
 upsertSession(newQueueKeyVal, 'WAITING')

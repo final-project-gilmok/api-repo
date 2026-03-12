@@ -162,7 +162,7 @@ public class QueueService {
                 admittedMembers.add(String.valueOf(result.get(i)));
             }
             if (!admittedMembers.isEmpty()) {
-                queueRedisRepository.updateSessionsToAdmitted(eventId, admittedMembers, SESSION_TTL_SECONDS);
+                queueRedisRepository.updateSessionsToAdmitted(eventId, admittedMembers, admittedTtlSeconds);
             }
 
             log.info("Admitted {} users from queue: eventId={}", admittedCount, eventId);
