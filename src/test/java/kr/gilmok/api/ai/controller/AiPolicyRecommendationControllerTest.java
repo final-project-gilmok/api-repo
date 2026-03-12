@@ -41,7 +41,7 @@ class AiPolicyRecommendationControllerTest {
         Long mockAdminUserId = 1L;
 
         AiPolicyRecommendationDto mockResponse = new AiPolicyRecommendationDto(
-                "DECREASE", 100, 50, 300, "컨트롤러 테스트", null
+                "DECREASE", 100, 50, "컨트롤러 테스트", null
         );
 
         given(aiService.getRecommendation(eventId, mockAdminUserId)).willReturn(mockResponse);

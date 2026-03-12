@@ -18,13 +18,14 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AdmissionScheduler {
 
-    private static final long ADMISSION_LOCK_TTL_MS = 5000;
+    private static final long ADMISSION_LOCK_TTL_MS = 15000;
 
     private static final String ROUTING_DISABLED = "ROUTING_DISABLED";
 
@@ -33,6 +34,8 @@ public class AdmissionScheduler {
     private final QueueRedisRepository queueRedisRepository;
     private final PolicyCacheRepository policyCacheRepository;
     private final MeterRegistry meterRegistry;
+
+    private final AtomicLong lastSuccessfulRunMs = new AtomicLong(System.currentTimeMillis());
 
     @Value("${queue.admission-rps:10}")
     private int defaultAdmissionRps;
@@ -79,5 +82,10 @@ public class AdmissionScheduler {
                 }
             }
         }
+        lastSuccessfulRunMs.set(System.currentTimeMillis());
+    }
+
+    public long getLastSuccessfulRunMs() {
+        return lastSuccessfulRunMs.get();
     }
 }

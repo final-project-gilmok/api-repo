@@ -74,6 +74,12 @@ if graceMs > 0 then
   end
 end
 
+-- Safety TTL on heartbeats key (gracePeriod * 3, in seconds)
+local hbTtlSec = math.ceil(graceMs * 3 / 1000)
+if hbTtlSec > 0 then
+  redis.call('EXPIRE', heartbeatsKey, hbTtlSec)
+end
+
 -- ------------------------------------------------------------
 -- 3) Token bucket refill + consume (how many we can admit)
 -- ------------------------------------------------------------
