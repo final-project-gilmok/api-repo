@@ -18,13 +18,14 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AdmissionScheduler {
 
-    private static final long ADMISSION_LOCK_TTL_MS = 5000;
+    private static final long ADMISSION_LOCK_TTL_MS = 15000;
 
     private static final String ROUTING_DISABLED = "ROUTING_DISABLED";
 
@@ -34,12 +35,15 @@ public class AdmissionScheduler {
     private final PolicyCacheRepository policyCacheRepository;
     private final MeterRegistry meterRegistry;
 
+    private final AtomicLong lastSuccessfulRunMs = new AtomicLong(System.currentTimeMillis());
+
     @Value("${queue.admission-rps:10}")
     private int defaultAdmissionRps;
 
     @Scheduled(fixedDelay = 1000)
     public void processAdmission() {
         List<Event> openEvents = eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN);
+        boolean anySuccess = false;
         for (Event event : openEvents) {
             String eventId = String.valueOf(event.getId());
             String lockValue = UUID.randomUUID().toString();
@@ -71,6 +75,7 @@ public class AdmissionScheduler {
                 }
 
                 queueService.runAdmissionCycle(eventId, rps, maxConcurrency);
+                anySuccess = true;
             } catch (Exception e) {
                 log.error("Admission processing failed for eventId={}", eventId, e);
             } finally {
@@ -79,5 +84,12 @@ public class AdmissionScheduler {
                 }
             }
         }
+        if (anySuccess || openEvents.isEmpty()) {
+            lastSuccessfulRunMs.set(System.currentTimeMillis());
+        }
+    }
+
+    public long getLastSuccessfulRunMs() {
+        return lastSuccessfulRunMs.get();
     }
 }

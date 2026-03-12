@@ -8,7 +8,6 @@ import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
-import kr.gilmok.api.token.service.TokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,8 +29,6 @@ import static org.mockito.Mockito.verify;
 class QueueServiceTest {
 
     @Mock
-    private TokenService tokenService;
-    @Mock
     private QueueRedisRepository queueRedisRepository;
     @Mock
     private PolicyCacheRepository policyCacheRepository;
@@ -49,6 +46,7 @@ class QueueServiceTest {
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
+        ReflectionTestUtils.setField(queueService, "defaultEventId", "default");
     }
 
     private QueueRegisterRequest createRequest(String eventId) {
@@ -124,20 +122,19 @@ class QueueServiceTest {
     // === getStatus 테스트 ===
 
     @Test
-    @DisplayName("상태 조회 - admitted 상태면 ADMITTABLE과 admissionToken을 반환한다")
+    @DisplayName("상태 조회 - admitted 상태면 ADMITTABLE을 반환한다")
     void getStatus_admitted_returnsAdmittable() {
         // given — statusCode=1
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(1L, -1L, 0L, 0L));
-        given(tokenService.issueAdmissionToken(eq("event1"), anyString(), eq(USER_ID), eq("testuser"), eq(0L)))
-                .willReturn("test-admission-token");
 
         // when
         QueueStatusResponse response = queueService.getStatus("event1", "queue1", "testuser", USER_ID);
 
         // then
         assertThat(response.getStatus()).isEqualTo(QueueStatus.ADMITTABLE);
-        assertThat(response.getAdmissionToken()).isEqualTo("test-admission-token");
         assertThat(response.getPollAfterMs()).isEqualTo(0);
     }
 
@@ -145,6 +142,8 @@ class QueueServiceTest {
     @DisplayName("상태 조회 - 대기 중이면 WAITING과 position, total을 반환한다")
     void getStatus_waiting_returnsWaitingWithPosition() {
         // given — statusCode=2, rank=4, total=100, admitCount=20
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 4L, 100L, 20L));
 
@@ -161,6 +160,8 @@ class QueueServiceTest {
     @DisplayName("상태 조회 - 만료 상태면 EXPIRED를 반환한다")
     void getStatus_notFound_returnsExpired() {
         // given — statusCode=3
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(3L, -1L, 0L, 0L));
 
@@ -179,6 +180,8 @@ class QueueServiceTest {
     @DisplayName("동적 폴링 - position 1000 이상이면 5000ms를 반환한다")
     void getStatus_position1000Plus_returns5000ms() {
         // given — rank=1499 → position=1500
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 1499L, 2000L, 0L));
 
@@ -193,6 +196,8 @@ class QueueServiceTest {
     @DisplayName("동적 폴링 - position 100~999이면 3000ms를 반환한다")
     void getStatus_position100to999_returns3000ms() {
         // given — rank=499 → position=500
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 499L, 1000L, 0L));
 
@@ -207,6 +212,8 @@ class QueueServiceTest {
     @DisplayName("동적 폴링 - position 100 미만이면 1000ms를 반환한다")
     void getStatus_positionUnder100_returns1000ms() {
         // given — rank=9 → position=10
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 9L, 50L, 0L));
 
@@ -223,6 +230,8 @@ class QueueServiceTest {
     @DisplayName("ETA - admitCount가 있으면 실측 rps로 계산한다")
     void getStatus_withAdmitCount_usesRealRpsForEta() {
         // given — rank=99 → position=100, admitCount=60 in 60s → rps=1
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 99L, 200L, 60L));
 
@@ -237,6 +246,8 @@ class QueueServiceTest {
     @DisplayName("ETA - admitCount가 0이면 admissionRps로 폴백한다")
     void getStatus_withoutAdmitCount_fallsBackToAdmissionRps() {
         // given — rank=99 → position=100, admitCount=0
+        given(queueRedisRepository.getQueueOwnerUserId("event1", "queue1"))
+                .willReturn(USER_ID);
         given(queueRedisRepository.getStatusAtomic("event1", "queue1", 60))
                 .willReturn(Arrays.asList(2L, 99L, 200L, 0L));
 

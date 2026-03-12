@@ -78,6 +78,14 @@ public class RedisConfig {
     }
 
     @Bean
+    public DefaultRedisScript<Long> rateLimitScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/rate-limit.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    @Bean
     public DefaultRedisScript<Long> unlockScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/unlock.lua")));

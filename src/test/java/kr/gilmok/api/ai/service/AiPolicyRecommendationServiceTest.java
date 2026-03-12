@@ -95,7 +95,7 @@ class AiPolicyRecommendationServiceTest {
 
         // AI 최종 반환 DTO 모킹
         AiPolicyRecommendationDto mockAiResponse = new AiPolicyRecommendationDto(
-                "DECREASE", 50, 20, 60, "부하 심각", null
+                "DECREASE", 50, 20, "부하 심각", null
         );
 
         // 4. callResponseSpec.entity(Dto.class) 호출 시 우리가 만든 가짜 DTO 리턴

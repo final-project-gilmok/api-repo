@@ -66,7 +66,7 @@ class AdmissionSchedulerTest {
         Event event = createEvent(1L);
         given(eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN))
                 .willReturn(List.of(event));
-        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(5000L)))
+        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(15000L)))
                 .willReturn(true);
         given(queueRedisRepository.unlock(eq("1"), anyString()))
                 .willReturn(true);
@@ -87,7 +87,7 @@ class AdmissionSchedulerTest {
         Event event = createEvent(1L);
         given(eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN))
                 .willReturn(List.of(event));
-        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(5000L)))
+        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(15000L)))
                 .willReturn(false);
 
         // when
@@ -110,7 +110,7 @@ class AdmissionSchedulerTest {
         Event event = createEvent(1L);
         given(eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN))
                 .willReturn(List.of(event));
-        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(5000L)))
+        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(15000L)))
                 .willReturn(true);
         given(policyCacheRepository.find(1L)).willReturn(Optional.empty());
         doThrow(new RuntimeException("test error"))
@@ -130,7 +130,7 @@ class AdmissionSchedulerTest {
         Event event = createEvent(1L);
         given(eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN))
                 .willReturn(List.of(event));
-        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(5000L)))
+        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(15000L)))
                 .willReturn(true);
         given(queueRedisRepository.unlock(eq("1"), anyString()))
                 .willReturn(true);
@@ -154,7 +154,7 @@ class AdmissionSchedulerTest {
         Event event = createEvent(1L);
         given(eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN))
                 .willReturn(List.of(event));
-        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(5000L)))
+        given(queueRedisRepository.tryLock(eq("1"), anyString(), eq(15000L)))
                 .willReturn(true);
         given(queueRedisRepository.unlock(eq("1"), anyString()))
                 .willReturn(true);

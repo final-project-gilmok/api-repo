@@ -17,8 +17,14 @@ spring:
       host: ${SPRING_DATA_REDIS_HOST}
       port: ${SPRING_DATA_REDIS_PORT}
       password: ${SPRING_DATA_REDIS_PASSWORD}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
       ssl:
         enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true} # 기본값 true
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:50}
+          max-idle: ${REDIS_POOL_MAX_IDLE:20}
+          min-idle: ${REDIS_POOL_MIN_IDLE:10}
 
   jpa:
     hibernate:
@@ -36,6 +42,9 @@ spring:
         chat:
           options:
             model: "gemini-2.0-flash"
+
+server:
+  port: 8080
 
 app:
   jwt:
