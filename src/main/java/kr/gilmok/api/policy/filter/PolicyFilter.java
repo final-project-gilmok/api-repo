@@ -173,7 +173,7 @@ public class PolicyFilter extends OncePerRequestFilter {
             }
         } catch (DataAccessException e) {
             // Redis 장애 시에만 Fail-Open (차단/rate limit 건너뛰고 통과)
-            log.error("[PolicyFilter] Redis error during policy enforcement (Fail-Open): eventId={}, {}", eventId, e.getMessage());
+            log.error("[PolicyFilter] Redis error during policy enforcement (Fail-Open): eventId={}", eventId, e);
         }
 
         filterChain.doFilter(wrappedRequest, response);
