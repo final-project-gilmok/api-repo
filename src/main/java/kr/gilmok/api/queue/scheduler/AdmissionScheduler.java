@@ -43,6 +43,7 @@ public class AdmissionScheduler {
     @Scheduled(fixedDelay = 1000)
     public void processAdmission() {
         List<Event> openEvents = eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN);
+        boolean anySuccess = false;
         for (Event event : openEvents) {
             String eventId = String.valueOf(event.getId());
             String lockValue = UUID.randomUUID().toString();
@@ -74,6 +75,7 @@ public class AdmissionScheduler {
                 }
 
                 queueService.runAdmissionCycle(eventId, rps, maxConcurrency);
+                anySuccess = true;
             } catch (Exception e) {
                 log.error("Admission processing failed for eventId={}", eventId, e);
             } finally {
@@ -82,7 +84,9 @@ public class AdmissionScheduler {
                 }
             }
         }
-        lastSuccessfulRunMs.set(System.currentTimeMillis());
+        if (anySuccess || openEvents.isEmpty()) {
+            lastSuccessfulRunMs.set(System.currentTimeMillis());
+        }
     }
 
     public long getLastSuccessfulRunMs() {

@@ -22,8 +22,8 @@ queue:
   admitted-ttl-seconds: ${QUEUE_ADMITTED_TTL_SECONDS:300}
   grace-period-seconds: ${QUEUE_GRACE_PERIOD_SECONDS:180}
   rate-limit:
-    requests-per-second: 10
-    window-ms: 1000
+    requests-per-second: ${QUEUE_RATE_LIMIT_RPS:10}
+    window-ms: ${QUEUE_RATE_LIMIT_WINDOW_MS:1000}
 
 reservation:
   seat-lock-ttl-seconds: 300
