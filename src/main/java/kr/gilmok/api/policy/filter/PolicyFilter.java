@@ -13,6 +13,7 @@ import kr.gilmok.common.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -70,7 +72,7 @@ public class PolicyFilter extends OncePerRequestFilter {
     private static final ExecutorService REGEX_MATCH_EXECUTOR = new ThreadPoolExecutor(
             4, 4, 0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>(REGEX_MATCH_QUEUE_CAPACITY),
-            new ThreadPoolExecutor.CallerRunsPolicy()
+            new ThreadPoolExecutor.AbortPolicy()
     );
 
     /** 타임아웃 발생한 정규식: 재제출 방지용. PATTERN_CACHE와 별도 관리. */
@@ -169,7 +171,7 @@ public class PolicyFilter extends OncePerRequestFilter {
                     return;
                 }
             }
-        } catch (Exception e) {
+        } catch (DataAccessException e) {
             // Redis 장애 시에만 Fail-Open (차단/rate limit 건너뛰고 통과)
             log.error("[PolicyFilter] Redis error during policy enforcement (Fail-Open): eventId={}, {}", eventId, e.getMessage());
         }
@@ -233,9 +235,22 @@ public class PolicyFilter extends OncePerRequestFilter {
         }
         Pattern p = PATTERN_CACHE.get(regex);
         if (p == null) {
+            final String finalRegex = regex;
+            Future<Pattern> compileFuture;
             try {
-                p = Pattern.compile(regex);
+                compileFuture = REGEX_MATCH_EXECUTOR.submit(() -> Pattern.compile(finalRegex));
+            } catch (RejectedExecutionException e) {
+                log.warn("[PolicyFilter] Regex executor queue full, skipping compile");
+                return false;
+            }
+            try {
+                p = compileFuture.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 PATTERN_CACHE.put(regex, p);
+            } catch (TimeoutException e) {
+                compileFuture.cancel(true);
+                TIMEOUT_PATTERNS.add(regex);
+                log.warn("[PolicyFilter] Regex compile timeout, regex length={}", regex.length());
+                return false;
             } catch (Exception e) {
                 log.debug("[PolicyFilter] Invalid regex pattern: {}", regex);
                 INVALID_PATTERNS.add(regex);
@@ -244,7 +259,13 @@ public class PolicyFilter extends OncePerRequestFilter {
         }
         final Pattern finalP = p;
         // ReDoS 방지: 타임아웃 내에서만 매칭 수행
-        Future<Boolean> future = REGEX_MATCH_EXECUTOR.submit(() -> finalP.matcher(input).find());
+        Future<Boolean> future;
+        try {
+            future = REGEX_MATCH_EXECUTOR.submit(() -> finalP.matcher(input).find());
+        } catch (RejectedExecutionException e) {
+            log.warn("[PolicyFilter] Regex executor queue full, skipping match");
+            return false;
+        }
         try {
             return future.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -286,7 +307,7 @@ public class PolicyFilter extends OncePerRequestFilter {
         if (!response.isCommitted()) {
             response.setStatus(status);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"message\":\"" + message.replace("\"", "\\\"") + "\"}");
+            response.getWriter().write(objectMapper.writeValueAsString(Map.of("message", message)));
         }
     }
 }
