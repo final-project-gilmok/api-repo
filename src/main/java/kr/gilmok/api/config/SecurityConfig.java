@@ -1,7 +1,5 @@
 package kr.gilmok.api.config;
 
-import jakarta.servlet.Filter;
-import kr.gilmok.api.policy.filter.PolicyFilter;
 import kr.gilmok.common.security.CommonSecurityConfig;
 import kr.gilmok.common.filter.JwtAuthenticationFilter;
 import kr.gilmok.common.security.CustomAuthenticationEntryPoint;
@@ -10,24 +8,13 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 
-import java.util.List;
-
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig extends CommonSecurityConfig {
 
-    private final PolicyFilter policyFilter;
-
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-            CustomAuthenticationEntryPoint customAuthenticationEntryPoint,
-            PolicyFilter policyFilter) {
+                          CustomAuthenticationEntryPoint customAuthenticationEntryPoint) {
         super(jwtAuthenticationFilter, customAuthenticationEntryPoint);
-        this.policyFilter = policyFilter;
-    }
-
-    @Override
-    protected List<Filter> getFiltersAfterJwtAuthentication() {
-        return List.of(policyFilter);
     }
 
     @Override

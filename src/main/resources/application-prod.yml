@@ -45,3 +45,8 @@ app:
 metrics:
   prometheus:
     url: ${PROMETHEUS_URL:http://prometheus:9090}
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://tempo:4317
