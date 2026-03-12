@@ -14,9 +14,7 @@ spring:
   # [추가] Redis 설정 (운영 환경)
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST}
-      port: ${SPRING_DATA_REDIS_PORT}
-      password: ${SPRING_DATA_REDIS_PASSWORD}
+      url: ${REDIS_URL}
       timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
       ssl:
         enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true} # 기본값 true
