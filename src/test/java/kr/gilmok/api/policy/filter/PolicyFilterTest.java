@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -35,6 +36,10 @@ class PolicyFilterTest {
 
     @Mock
     private RedisTemplate<String, String> redisTemplate;
+
+    @SuppressWarnings("rawtypes")
+    @Mock
+    private DefaultRedisScript policyEnforceScript;
 
     @Mock
     private FilterChain filterChain;
@@ -69,10 +74,12 @@ class PolicyFilterTest {
     @DisplayName("보안 검사 executor 포화 시 429를 반환하고 요청을 차단한다")
     void doFilter_executorRejected_returns429AndDoesNotCallChain() throws Exception {
         // given
+        @SuppressWarnings("unchecked")
         PolicyFilter policyFilter = new PolicyFilter(
                 policyCacheRepository,
                 redisTemplate,
-                new com.fasterxml.jackson.databind.ObjectMapper()
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                policyEnforceScript
         );
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/queue/register");
@@ -90,8 +97,6 @@ class PolicyFilterTest {
         when(policy.blockRules()).thenReturn(blockRules);
         when(blockRules.ipPattern()).thenReturn("127\\.0\\.0\\.1");
         // userAgentPattern 스텁 제거: executor 포화 시 IP 검사 제출에서 바로 RejectedExecutionException 발생해 UA 검사까지 도달하지 않음
-
-        when(redisTemplate.hasKey("policy:block:1:ip:127.0.0.1")).thenReturn(false);
 
         saturateRegexExecutor();
 

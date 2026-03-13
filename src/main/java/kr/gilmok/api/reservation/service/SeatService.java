@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,11 +26,10 @@ public class SeatService {
 
     public List<SeatResponse> getSeatsByEvent(Long eventId) {
         List<Seat> seats = seatRepository.findByEventId(eventId);
+        List<Long> seatIds = seats.stream().map(Seat::getId).toList();
+        Map<Long, Integer> availableMap = seatLockRedisRepository.getAvailableBulk(eventId, seatIds);
         return seats.stream()
-                .map(seat -> {
-                    int redisAvailable = seatLockRedisRepository.getAvailable(eventId, seat.getId());
-                    return SeatResponse.of(seat, redisAvailable);
-                })
+                .map(seat -> SeatResponse.of(seat, availableMap.getOrDefault(seat.getId(), 0)))
                 .toList();
     }
 

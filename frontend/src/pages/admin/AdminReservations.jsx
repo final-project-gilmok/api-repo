@@ -112,7 +112,7 @@ export default function AdminReservations() {
                   {reservations.map((r) => (
                     <tr key={r.reservationCode}>
                       <td className="font-monospace small">{r.reservationCode?.slice(0, 8)}...</td>
-                      <td>{r.userId || '-'}</td>
+                      <td>{r.username || r.userId || '-'}</td>
                       <td>{r.section}석</td>
                       <td>{r.quantity}매</td>
                       <td>{r.totalPrice?.toLocaleString()}원</td>
