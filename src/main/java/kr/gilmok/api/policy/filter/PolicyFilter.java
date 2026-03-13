@@ -234,8 +234,8 @@ public class PolicyFilter extends OncePerRequestFilter {
                 byte[] body = wrapper.getInputStream().readAllBytes();
                 if (body.length > 0) {
                     JsonNode node = objectMapper.readTree(body);
-                    if (node.has("eventId") && node.get("eventId").isNumber()) {
-                        fromBody = node.get("eventId").asLong();
+                    if (node.has("eventId")) {
+                        fromBody = parseEventIdNode(node.get("eventId"));
                     }
                 }
             } catch (Exception e) {
@@ -510,5 +510,30 @@ public class PolicyFilter extends OncePerRequestFilter {
                 Collections.singletonList(key),
                 String.valueOf(expireSeconds)
         );
+    }
+
+    private Long parseEventIdNode(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+
+        if (node.isNumber()) {
+            return node.asLong();
+        }
+
+        if (node.isTextual()) {
+            String value = node.asText();
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+
+            try {
+                return Long.parseLong(value.trim());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        return null;
     }
 }
