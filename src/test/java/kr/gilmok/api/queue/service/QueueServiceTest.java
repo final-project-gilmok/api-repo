@@ -2,7 +2,7 @@ package kr.gilmok.api.queue.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import kr.gilmok.api.policy.repository.PolicyCacheRepository;
+import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.queue.QueueStatus;
 import kr.gilmok.api.queue.dto.QueueRegisterRequest;
 import kr.gilmok.api.queue.dto.QueueRegisterResponse;
@@ -30,8 +30,6 @@ class QueueServiceTest {
 
     @Mock
     private QueueRedisRepository queueRedisRepository;
-    @Mock
-    private PolicyCacheRepository policyCacheRepository;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -39,10 +37,12 @@ class QueueServiceTest {
 
     private static final Long USER_ID = 1L;
     private static final String USER_ID_STR = "1";
+    private static final PolicyCacheDto TEST_POLICY = new PolicyCacheDto(
+            true, 1L, 10, 0, 1L, null, 0, 10, "ROUTING_ENABLED");
 
     @BeforeEach
     void setUp() {
-        queueService = new QueueService(queueRedisRepository, policyCacheRepository, meterRegistry);
+        queueService = new QueueService(queueRedisRepository, meterRegistry);
         ReflectionTestUtils.setField(queueService, "admissionRps", 10);
         ReflectionTestUtils.setField(queueService, "admittedTtlSeconds", 300);
         ReflectionTestUtils.setField(queueService, "gracePeriodSeconds", 180);
@@ -70,16 +70,19 @@ class QueueServiceTest {
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
                 eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
-                .willReturn(Arrays.asList(1L, "new-queue-key", 0L));
+                .willReturn(Arrays.asList(1L, "new-queue-key", 0L, 100L, 50L));
 
         // when
-        QueueRegisterResponse response = queueService.register(USER_ID, request);
+        QueueRegisterResponse response = queueService.register(USER_ID, request, TEST_POLICY);
 
         // then
         assertThat(response.getQueueKey()).isEqualTo("new-queue-key");
         assertThat(response.getPosition()).isEqualTo(1);
         verify(queueRedisRepository).registerIdempotent(
                 eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt());
+        // metrics come from Lua return values — no extra Redis calls
+        verify(queueRedisRepository, never()).getQueueSize(anyString());
+        verify(queueRedisRepository, never()).getAdmittedCount(anyString());
     }
 
     @Test
@@ -89,10 +92,10 @@ class QueueServiceTest {
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
                 eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
-                .willReturn(Arrays.asList(0L, "existing-queue-key", 5L));
+                .willReturn(Arrays.asList(0L, "existing-queue-key", 5L, 100L, 50L));
 
         // when
-        QueueRegisterResponse response = queueService.register(USER_ID, request);
+        QueueRegisterResponse response = queueService.register(USER_ID, request, TEST_POLICY);
 
         // then
         assertThat(response.getQueueKey()).isEqualTo("existing-queue-key");
@@ -108,15 +111,49 @@ class QueueServiceTest {
         QueueRegisterRequest request = createRequest("event1");
         given(queueRedisRepository.registerIdempotent(
                 eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
-                .willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L));
+                .willReturn(Arrays.asList(-1L, "admitted-queue-key", -1L, 100L, 50L));
 
         // when
-        QueueRegisterResponse response = queueService.register(USER_ID, request);
+        QueueRegisterResponse response = queueService.register(USER_ID, request, TEST_POLICY);
 
         // then
         assertThat(response.getQueueKey()).isEqualTo("admitted-queue-key");
         assertThat(response.getPosition()).isEqualTo(0);
         assertThat(response.getEtaSeconds()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("등록 - policy가 null이면 기본 admissionRps로 ETA를 계산한다")
+    void register_nullPolicy_fallsBackToDefaultRps() {
+        // given — admissionRps=10, rank=9 → position=10, ETA=10/10=1
+        QueueRegisterRequest request = createRequest("event1");
+        given(queueRedisRepository.registerIdempotent(
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
+                .willReturn(Arrays.asList(1L, "new-queue-key", 9L, 100L, 50L));
+
+        // when — policy=null (PolicyFilter를 거치지 않은 경우)
+        QueueRegisterResponse response = queueService.register(USER_ID, request, null);
+
+        // then
+        assertThat(response.getEtaSeconds()).isEqualTo(1); // 10 / default(10)
+    }
+
+    @Test
+    @DisplayName("등록 - policy의 admissionRps가 기본값과 다르면 해당 값으로 ETA를 계산한다")
+    void register_policyOverridesAdmissionRps() {
+        // given — policy admissionRps=50, rank=49 → position=50, ETA=50/50=1
+        PolicyCacheDto customPolicy = new PolicyCacheDto(
+                true, 1L, 50, 0, 1L, null, 0, 10, "ROUTING_ENABLED");
+        QueueRegisterRequest request = createRequest("event1");
+        given(queueRedisRepository.registerIdempotent(
+                eq("event1"), eq(USER_ID_STR), anyString(), anyDouble(), anyInt()))
+                .willReturn(Arrays.asList(1L, "new-queue-key", 49L, 200L, 100L));
+
+        // when
+        QueueRegisterResponse response = queueService.register(USER_ID, request, customPolicy);
+
+        // then — default(10)였으면 ETA=5, policy(50)이면 ETA=1
+        assertThat(response.getEtaSeconds()).isEqualTo(1);
     }
 
     // === getStatus 테스트 ===

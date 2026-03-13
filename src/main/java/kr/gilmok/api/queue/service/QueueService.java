@@ -9,7 +9,6 @@ import kr.gilmok.api.queue.dto.QueueRegisterResponse;
 import kr.gilmok.api.queue.dto.QueueStatusResponse;
 import kr.gilmok.api.queue.exception.QueueErrorCode;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
-import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class QueueService {
 
     private final QueueRedisRepository queueRedisRepository;
-    private final PolicyCacheRepository policyCacheRepository;
     private final MeterRegistry meterRegistry;
 
     private final Map<String, AtomicLong> waitingQueueSizes = new ConcurrentHashMap<>();
@@ -63,7 +61,7 @@ public class QueueService {
 
     // === 1. 대기열 등록 (멱등 + admitted 차단) — 1 Redis 호출 ===
 
-    public QueueRegisterResponse register(Long userId, QueueRegisterRequest request) {
+    public QueueRegisterResponse register(Long userId, QueueRegisterRequest request, PolicyCacheDto policy) {
         if (userId == null) {
            throw new IllegalArgumentException("userId must not be null");
         }
@@ -87,11 +85,13 @@ public class QueueService {
         }
 
         if (isNew == 1) {
-            updateMetrics(eventId);
+            long waitingSize = toLong(result.get(3));
+            long admittedSize = toLong(result.get(4));
+            updateMetricsFromValues(eventId, waitingSize, admittedSize);
         }
 
         long position = rank + 1;
-        int effectiveRps = resolveAdmissionRps(eventId);
+        int effectiveRps = resolveAdmissionRps(policy);
         long etaSeconds = position / effectiveRps;
 
         log.info("Queue registered: eventId={}, userId={}, queueKey={}, isNew={}, position={}",
@@ -206,17 +206,11 @@ public class QueueService {
 
     // === Policy Lookup ===
 
-    private int resolveAdmissionRps(String eventId) {
-        try {
-            long evId = Long.parseLong(eventId);
-            return policyCacheRepository.find(evId)
-                    .filter(PolicyCacheDto::exists)
-                    .map(PolicyCacheDto::admissionRps)
-                    .filter(rps -> rps > 0)
-                    .orElse(admissionRps);
-        } catch (Exception e) {
-            return admissionRps;
+    private int resolveAdmissionRps(PolicyCacheDto policy) {
+        if (policy != null && policy.exists() && policy.admissionRps() > 0) {
+            return policy.admissionRps();
         }
+        return admissionRps;
     }
 
     // === ETA Calculation ===
