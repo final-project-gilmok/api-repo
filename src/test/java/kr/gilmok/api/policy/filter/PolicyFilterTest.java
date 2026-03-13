@@ -105,12 +105,17 @@ class PolicyFilterTest {
         for (int i = 0; i < poolSize + queueCapacity; i++) {
             Future<?> future = executor.submit(() -> {
                 try {
-                    releaseLatch.await(5, TimeUnit.SECONDS);
+                    releaseLatch.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
             });
             saturatedFutures.add(future);
+        }
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (System.nanoTime() < deadline
+                && (executor.getActiveCount() < poolSize || executor.getQueue().remainingCapacity() > 0)) {
+            Thread.sleep(10);
         }
 
         assertThat(executor.getActiveCount()).isEqualTo(poolSize);

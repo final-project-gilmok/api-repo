@@ -238,8 +238,9 @@ public class PolicyFilter extends OncePerRequestFilter {
                         fromBody = node.get("eventId").asLong();
                     }
                 }
-            } catch (Exception ignored) {
-                // body 파싱 실패는 여기서 막지 않음
+            } catch (Exception e) {
+                // body 파싱 실패는 차단하지 않되, 운영 추적을 위해 debug 로깅
+                log.debug("[PolicyFilter] eventId parse from body skipped: path={}", request.getRequestURI(), e);
             }
         }
 
