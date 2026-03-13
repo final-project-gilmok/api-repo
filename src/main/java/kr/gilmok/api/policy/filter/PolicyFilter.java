@@ -15,15 +15,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -45,6 +46,9 @@ public class PolicyFilter extends OncePerRequestFilter {
 
     private static final String QUEUE_PATH_PREFIX = "/queue/";
     private static final String QUEUE_REGISTER_PATH = "/queue/register";
+
+    /** PolicyFilter → Controller 간 정책 전달용 request attribute 키 */
+    public static final String POLICY_CACHE_ATTR = "policyCache";
 
     private static final String BLOCK_KEY_PREFIX = "policy:block:";
     private static final String RATE_LIMIT_KEY_PREFIX = "policy:rl:";
@@ -102,6 +106,7 @@ public class PolicyFilter extends OncePerRequestFilter {
     private final PolicyCacheRepository policyCacheRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final DefaultRedisScript<Long> policyEnforceScript;
 
     @Value("${app.policy.trust-forwarded-for:false}")
     private boolean trustForwardedFor;
@@ -154,16 +159,7 @@ public class PolicyFilter extends OncePerRequestFilter {
 
         String blockKey = BLOCK_KEY_PREFIX + eventId + ":" + clientKey;
 
-        try {
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(blockKey))) {
-                log.debug("[PolicyFilter] Request from blocked client: eventId={}, key={}", eventId, clientKey);
-                sendError(response, 429, "Too many requests; temporarily blocked");
-                return;
-            }
-        } catch (DataAccessException e) {
-            log.error("[PolicyFilter] Redis error while checking block key (Fail-Open): eventId={}", eventId, e);
-        }
-
+        // 1. 차단 규칙 확인 (Regex + Fail-Close timeout escalation)
         try {
             RuleCheckResult ruleResult = blockedByRules(eventId, clientKey, blockKey, policy.blockRules(), path, clientIp, userAgent);
 
@@ -193,29 +189,36 @@ public class PolicyFilter extends OncePerRequestFilter {
             return;
         }
 
+        // 2. Block check + Rate limit — single Lua call (EXISTS + INCR/EXPIRE + SET)
         try {
             int maxRps = policy.maxRequestsPerSecond();
-            if (maxRps > 0) {
-                long currentSecond = System.currentTimeMillis() / 1000;
-                String rlKey = RATE_LIMIT_KEY_PREFIX + eventId + ":" + clientKey + ":" + currentSecond;
+            long currentSecond = System.currentTimeMillis() / 1000;
+            String rlKey = RATE_LIMIT_KEY_PREFIX + eventId + ":" + clientKey + ":" + currentSecond;
+            int blockSeconds = policy.blockDurationMinutes() * 60;
 
-                Long count = incrementWithExpire(rlKey, 2L);
+            Long enforceResult = redisTemplate.execute(policyEnforceScript,
+                    List.of(blockKey, rlKey),
+                    String.valueOf(maxRps), String.valueOf(blockSeconds));
 
-                if (count != null && count > maxRps) {
-                    int blockMinutes = policy.blockDurationMinutes();
-                    if (blockMinutes > 0) {
-                        redisTemplate.opsForValue().set(blockKey, "1", blockMinutes, TimeUnit.MINUTES);
-                    }
-                    log.warn("[PolicyFilter] Rate limit exceeded, blocking: eventId={}, key={}, count={}, maxRps={}, blockMin={}",
-                            eventId, clientKey, count, maxRps, blockMinutes);
-                    sendError(response, 429, "Too many requests; temporarily blocked");
-                    return;
+            if (enforceResult != null && enforceResult > 0) {
+                String maskedKey = maskClientKey(clientKey);
+                if (enforceResult == 1) {
+                    log.debug("[PolicyFilter] Request from blocked client: eventId={}, key={}", eventId, maskedKey);
+                } else if (enforceResult == 2) {
+                    log.warn("[PolicyFilter] Rate limit exceeded, client blocked: eventId={}, key={}, maxRps={}, blockSec={}",
+                            eventId, maskedKey, maxRps, blockSeconds);
+                } else {
+                    log.warn("[PolicyFilter] Rate limit exceeded (no block configured): eventId={}, key={}, maxRps={}",
+                            eventId, maskedKey, maxRps);
                 }
+                sendError(response, 429, "Too many requests; temporarily blocked");
+                return;
             }
         } catch (DataAccessException e) {
             log.error("[PolicyFilter] Redis error during policy enforcement (Fail-Open): eventId={}", eventId, e);
         }
 
+        wrappedRequest.setAttribute(POLICY_CACHE_ATTR, policy);
         filterChain.doFilter(wrappedRequest, response);
     }
 
@@ -347,7 +350,6 @@ public class PolicyFilter extends OncePerRequestFilter {
             log.warn("[PolicyFilter] Regex match interrupted");
             return MatchOutcome.NOT_MATCHED;
         } catch (TimeoutException e) {
-            // cancel(true)는 get() 대기를 해제할 뿐, java.util.regex 실행 자체를 즉시 중단한다고 보장하지 않음
             future.cancel(true);
             log.warn("[PolicyFilter] Regex match timeout: regexLength={}, inputLength={}, mode={}",
                     regex.length(),
@@ -403,8 +405,9 @@ public class PolicyFilter extends OncePerRequestFilter {
         try {
             Long timeoutCount = incrementWithExpire(timeoutKey, REGEX_TIMEOUT_WINDOW_SECONDS);
 
+            String maskedKey = maskClientKey(clientKey);
             log.warn("[PolicyFilter] Regex timeout detected: eventId={}, ruleType={}, path={}, key={}, ip={}, ua={}, timeoutCount={}",
-                    eventId, ruleType, path, clientKey, maskIp(clientIp), userAgent, timeoutCount);
+                    eventId, ruleType, path, maskedKey, maskIp(clientIp), userAgent, timeoutCount);
 
             if (timeoutCount != null && timeoutCount >= REGEX_TIMEOUT_THRESHOLD) {
                 redisTemplate.opsForValue().set(
@@ -415,7 +418,7 @@ public class PolicyFilter extends OncePerRequestFilter {
                 );
 
                 log.warn("[PolicyFilter] Client temporarily blocked by repeated regex timeouts: eventId={}, ruleType={}, key={}, count={}",
-                        eventId, ruleType, clientKey, timeoutCount);
+                        eventId, ruleType, maskedKey, timeoutCount);
                 return true;
             }
 
@@ -460,6 +463,20 @@ public class PolicyFilter extends OncePerRequestFilter {
             return "***";
         }
         return ip.substring(0, ip.length() / 2) + "***";
+    }
+
+    /** clientKey("u:{id}" 또는 "ip:{addr}")의 값 부분을 마스킹. 예: "u:123" → "u:***", "ip:10.0.0.1" → "ip:10.***" */
+    private String maskClientKey(String clientKey) {
+        if (clientKey == null) return "***";
+        int colonIdx = clientKey.indexOf(':');
+        if (colonIdx < 0 || colonIdx + 1 >= clientKey.length()) return "***";
+        String prefix = clientKey.substring(0, colonIdx + 1);
+        String value = clientKey.substring(colonIdx + 1);
+        if (prefix.startsWith("ip:")) {
+            return prefix + maskIp(value);
+        }
+        // userId: 전부 마스킹
+        return prefix + "***";
     }
 
     private void sendError(HttpServletResponse response, int status, String message) throws IOException {
