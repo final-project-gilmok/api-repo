@@ -52,6 +52,15 @@ class PolicyFilterTest {
             future.cancel(true);
         }
 
+        for (Future<?> future : saturatedFutures) {
+            try {
+                future.get(100, TimeUnit.MILLISECONDS);
+            } catch (Exception ignored) {
+                // cancel된 future는 예외 발생 예상
+            }
+        }
+        saturatedFutures.clear();
+
         ThreadPoolExecutor executor = getRegexExecutor();
         executor.getQueue().clear();
     }
