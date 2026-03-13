@@ -134,9 +134,10 @@ public class PolicyFilter extends OncePerRequestFilter {
 
         Long eventId = extractEventId(wrappedRequest, response);
         if (eventId == null) {
-            if (!response.isCommitted()) {
-                filterChain.doFilter(wrappedRequest, response);
+            if (response.isCommitted() || response.getStatus() >= 400) {
+                return;
             }
+            filterChain.doFilter(wrappedRequest, response);
             return;
         }
 
@@ -430,11 +431,7 @@ public class PolicyFilter extends OncePerRequestFilter {
         if (path == null) {
             return false;
         }
-
-        return path.startsWith("/queue/register")
-                || path.startsWith("/admin")
-                || path.equals("/login")
-                || path.startsWith("/payment");
+        return path.startsWith("/queue/register");
     }
 
     private String resolveClientKey(String clientIp) {
