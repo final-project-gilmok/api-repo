@@ -20,12 +20,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -34,6 +36,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 @Slf4j
 @Component
@@ -41,11 +44,49 @@ import java.util.regex.Pattern;
 public class PolicyFilter extends OncePerRequestFilter {
 
     private static final String QUEUE_PATH_PREFIX = "/queue/";
+    private static final String QUEUE_REGISTER_PATH = "/queue/register";
+
     private static final String BLOCK_KEY_PREFIX = "policy:block:";
     private static final String RATE_LIMIT_KEY_PREFIX = "policy:rl:";
+    private static final String REGEX_TIMEOUT_KEY_PREFIX = "policy:regex-timeout:";
 
-    // 무제한 메모리 점유 방지를 위해 크기가 제한된 LRU 캐시 사용 (최대 500개 패턴)
     private static final int MAX_PATTERN_CACHE_SIZE = 500;
+
+    /** ReDoS 방지용 정규식 매칭 타임아웃 */
+    private static final long REGEX_MATCH_TIMEOUT_MS = 200L;
+
+    /** 정규식 작업 큐 제한 */
+    private static final int REGEX_MATCH_QUEUE_CAPACITY = 256;
+
+    /** timeout 누적 윈도우 */
+    private static final long REGEX_TIMEOUT_WINDOW_SECONDS = 30L;
+
+    /** 같은 clientKey + ruleType 에서 timeout이 이 횟수 이상 발생하면 임시 차단 */
+    private static final long REGEX_TIMEOUT_THRESHOLD = 5L;
+
+    /** timeout 기반 임시 차단 시간 */
+    private static final long REGEX_TIMEOUT_BLOCK_MINUTES = 1L;
+
+    private static final DefaultRedisScript<Long> INCR_WITH_EXPIRE_SCRIPT = new DefaultRedisScript<>(
+            """
+            local current = redis.call('INCR', KEYS[1])
+            if current == 1 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return current
+            """,
+            Long.class
+    );
+
+    private static final ExecutorService REGEX_MATCH_EXECUTOR = new ThreadPoolExecutor(
+            4,
+            4,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(REGEX_MATCH_QUEUE_CAPACITY),
+            new ThreadPoolExecutor.AbortPolicy()
+    );
+
     private static final Map<String, Pattern> PATTERN_CACHE = Collections.synchronizedMap(
             new LinkedHashMap<String, Pattern>(MAX_PATTERN_CACHE_SIZE, 0.75f, true) {
                 @Override
@@ -55,52 +96,29 @@ public class PolicyFilter extends OncePerRequestFilter {
             }
     );
 
-    private static final Set<String> INVALID_PATTERNS = Collections.synchronizedSet(
-            Collections.newSetFromMap(
-                    new LinkedHashMap<String, Boolean>(100, 0.75f, true) {
-                        @Override
-                        protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
-                            return size() > 100;
-                        }
-                    }
-            )
-    );
-
-    /** ReDoS 방지: 정규식 매칭 타임아웃(ms). 초과 시 매칭 실패로 간주. */
-    private static final long REGEX_MATCH_TIMEOUT_MS = 200;
-    private static final int REGEX_MATCH_QUEUE_CAPACITY = 256;
-    private static final ExecutorService REGEX_MATCH_EXECUTOR = new ThreadPoolExecutor(
-            4, 4, 0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(REGEX_MATCH_QUEUE_CAPACITY),
-            new ThreadPoolExecutor.AbortPolicy()
-    );
-
-    /** 타임아웃 발생한 정규식: 재제출 방지용. PATTERN_CACHE와 별도 관리. */
-    private static final Set<String> TIMEOUT_PATTERNS = Collections.synchronizedSet(
-            Collections.newSetFromMap(
-                    new LinkedHashMap<String, Boolean>(100, 0.75f, true) {
-                        @Override
-                        protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
-                            return size() > 100;
-                        }
-                    }
-            )
-    );
+    /** invalid pattern은 소량이면 충분하므로 단순 동시성 set으로 유지 */
+    private static final Set<String> INVALID_PATTERNS = ConcurrentHashMap.newKeySet();
 
     private final PolicyCacheRepository policyCacheRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    /** true일 때만 X-Forwarded-For 헤더를 신뢰. 기본값 false(프록시 미신뢰, getRemoteAddr 사용). */
     @Value("${app.policy.trust-forwarded-for:false}")
     private boolean trustForwardedFor;
+
+    /**
+     * true면 timeout이 발생한 민감 경로 요청은 즉시 차단.
+     * 기본은 false 권장.
+     */
+    @Value("${app.policy.fail-close-on-timeout-for-sensitive-paths:false}")
+    private boolean failCloseOnTimeoutForSensitivePaths;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        if (!path.startsWith(QUEUE_PATH_PREFIX)) {
+        if (path == null || !path.startsWith(QUEUE_PATH_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -116,9 +134,10 @@ public class PolicyFilter extends OncePerRequestFilter {
 
         Long eventId = extractEventId(wrappedRequest, response);
         if (eventId == null) {
-            if (!response.isCommitted()) {
-                filterChain.doFilter(wrappedRequest, response);
+            if (response.isCommitted() || response.getStatus() >= 400) {
+                return;
             }
+            filterChain.doFilter(wrappedRequest, response);
             return;
         }
 
@@ -132,33 +151,55 @@ public class PolicyFilter extends OncePerRequestFilter {
         String clientIp = getClientIp(wrappedRequest);
         String userAgent = wrappedRequest.getHeader("User-Agent");
         String clientKey = resolveClientKey(clientIp);
+
         String blockKey = BLOCK_KEY_PREFIX + eventId + ":" + clientKey;
 
-        // 1. 차단 규칙 확인 (Regex) — Redis 외 로직, 예외 시 그대로 전파
-        if (blockedByRules(policy.blockRules(), clientIp, userAgent)) {
-            log.info("[PolicyFilter] Request blocked by rules: eventId={}, ip={}, ua={}", eventId, maskIp(clientIp), userAgent);
-            sendError(response, 403, "Access denied by security policy");
-            return;
-        }
-
         try {
-            // 2. 임시 차단 여부 확인 (Redis)
             if (Boolean.TRUE.equals(redisTemplate.hasKey(blockKey))) {
                 log.debug("[PolicyFilter] Request from blocked client: eventId={}, key={}", eventId, clientKey);
                 sendError(response, 429, "Too many requests; temporarily blocked");
                 return;
             }
+        } catch (DataAccessException e) {
+            log.error("[PolicyFilter] Redis error while checking block key (Fail-Open): eventId={}", eventId, e);
+        }
 
-            // 3. Rate limit (maxRequestsPerSecond) — Redis만 사용
+        try {
+            RuleCheckResult ruleResult = blockedByRules(eventId, clientKey, blockKey, policy.blockRules(), path, clientIp, userAgent);
+
+            if (ruleResult.blocked()) {
+                log.info("[PolicyFilter] Request blocked by rules: eventId={}, ip={}, ua={}",
+                        eventId, maskIp(clientIp), userAgent);
+                sendError(response, 403, "Access denied by security policy");
+                return;
+            }
+
+            if (ruleResult.timedOut()) {
+                if (ruleResult.escalated()) {
+                    sendError(response, 429, "Suspicious request pattern detected");
+                    return;
+                }
+
+                if (failCloseOnTimeoutForSensitivePaths && isSensitivePath(path)) {
+                    log.warn("[PolicyFilter] Timeout on sensitive path, fail-close applied: eventId={}, path={}, ip={}",
+                            eventId, path, maskIp(clientIp));
+                    sendError(response, 403, "Request blocked by security policy");
+                    return;
+                }
+            }
+        } catch (SecurityThrottlingException e) {
+            log.warn("[PolicyFilter] Security filter overloaded, fail-close: eventId={}, path={}", eventId, path, e);
+            sendError(response, 429, "Security inspection overloaded");
+            return;
+        }
+
+        try {
             int maxRps = policy.maxRequestsPerSecond();
             if (maxRps > 0) {
                 long currentSecond = System.currentTimeMillis() / 1000;
                 String rlKey = RATE_LIMIT_KEY_PREFIX + eventId + ":" + clientKey + ":" + currentSecond;
-                Long count = redisTemplate.opsForValue().increment(rlKey);
 
-                if (count != null && count == 1) {
-                    redisTemplate.expire(rlKey, 2, TimeUnit.SECONDS);
-                }
+                Long count = incrementWithExpire(rlKey, 2L);
 
                 if (count != null && count > maxRps) {
                     int blockMinutes = policy.blockDurationMinutes();
@@ -172,7 +213,6 @@ public class PolicyFilter extends OncePerRequestFilter {
                 }
             }
         } catch (DataAccessException e) {
-            // Redis 장애 시에만 Fail-Open (차단/rate limit 건너뛰고 통과)
             log.error("[PolicyFilter] Redis error during policy enforcement (Fail-Open): eventId={}", eventId, e);
         }
 
@@ -180,23 +220,29 @@ public class PolicyFilter extends OncePerRequestFilter {
     }
 
     /**
-     * eventId 추출. POST는 body 우선(정책 우회 방지); query와 body 둘 다 있으면 불일치 시 400.
+     * eventId 추출. POST는 body 우선. query와 body 둘 다 있으면 불일치 시 400.
      */
     private Long extractEventId(HttpServletRequest request, HttpServletResponse response) throws IOException {
         Long fromQuery = parseEventIdParam(request.getParameter("eventId"));
+
         boolean isPostWithBody = "POST".equalsIgnoreCase(request.getMethod())
-                && request.getRequestURI() != null && request.getRequestURI().contains("/queue/register");
+                && request.getRequestURI() != null
+                && request.getRequestURI().startsWith(QUEUE_REGISTER_PATH);
+
         Long fromBody = null;
         if (isPostWithBody && request instanceof CachedBodyHttpServletRequestWrapper wrapper) {
             try {
                 byte[] body = wrapper.getInputStream().readAllBytes();
                 if (body.length > 0) {
                     JsonNode node = objectMapper.readTree(body);
-                    if (node.has("eventId") && node.get("eventId").isNumber()) {
-                        fromBody = node.get("eventId").asLong();
+                    if (node.has("eventId")) {
+                        fromBody = parseEventIdNode(node.get("eventId"));
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                // body 파싱 실패는 차단하지 않되, 운영 추적을 위해 debug 로깅
+                log.debug("[PolicyFilter] eventId parse from body skipped: path={}", request.getRequestURI(), e);
+            }
         }
 
         if (fromBody != null) {
@@ -206,11 +252,14 @@ public class PolicyFilter extends OncePerRequestFilter {
             }
             return fromBody;
         }
+
         return fromQuery;
     }
 
     private Long parseEventIdParam(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || value.isBlank()) {
+            return null;
+        }
         try {
             return Long.parseLong(value.trim());
         } catch (NumberFormatException e) {
@@ -218,65 +267,171 @@ public class PolicyFilter extends OncePerRequestFilter {
         }
     }
 
-    private boolean blockedByRules(BlockRules rules, String ip, String ua) {
-        if (rules == null) return false;
+    private RuleCheckResult blockedByRules(Long eventId,
+                                           String clientKey,
+                                           String blockKey,
+                                           BlockRules rules,
+                                           String path,
+                                           String ip,
+                                           String ua) {
+        if (rules == null) {
+            return RuleCheckResult.notBlocked();
+        }
+
+        boolean timedOut = false;
+        boolean escalated = false;
+
         if (rules.ipPattern() != null && ip != null) {
-            if (matches(rules.ipPattern(), ip)) return true;
+            MatchOutcome ipOutcome = matchWithTimeout(rules.ipPattern(), ip, MatchMode.FULL_MATCH);
+            if (ipOutcome == MatchOutcome.MATCHED) {
+                return RuleCheckResult.blockedResult();
+            }
+            if (ipOutcome == MatchOutcome.TIMED_OUT) {
+                timedOut = true;
+                escalated = handleRegexTimeout(eventId, clientKey, blockKey, "ip", path, ip, ua) || escalated;
+            }
         }
+
         if (rules.userAgentPattern() != null && ua != null) {
-            if (matches(rules.userAgentPattern(), ua)) return true;
+            MatchOutcome uaOutcome = matchWithTimeout(rules.userAgentPattern(), ua, MatchMode.FIND);
+            if (uaOutcome == MatchOutcome.MATCHED) {
+                return RuleCheckResult.blockedResult();
+            }
+            if (uaOutcome == MatchOutcome.TIMED_OUT) {
+                timedOut = true;
+                escalated = handleRegexTimeout(eventId, clientKey, blockKey, "ua", path, ip, ua) || escalated;
+            }
         }
-        return false;
+
+        if (timedOut) {
+            return RuleCheckResult.timedOutResult(escalated);
+        }
+        return RuleCheckResult.notBlocked();
     }
 
-    private boolean matches(String regex, String input) {
-        if (regex == null || regex.isBlank() || INVALID_PATTERNS.contains(regex) || TIMEOUT_PATTERNS.contains(regex)) {
-            return false;
+    private MatchOutcome matchWithTimeout(String regex, String input, MatchMode matchMode) {
+        if (regex == null || regex.isBlank()) {
+            return MatchOutcome.NOT_MATCHED;
         }
-        Pattern p = PATTERN_CACHE.get(regex);
-        if (p == null) {
-            final String finalRegex = regex;
-            Future<Pattern> compileFuture;
-            try {
-                compileFuture = REGEX_MATCH_EXECUTOR.submit(() -> Pattern.compile(finalRegex));
-            } catch (RejectedExecutionException e) {
-                log.warn("[PolicyFilter] Regex executor queue full, skipping compile");
-                return false;
-            }
-            try {
-                p = compileFuture.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                PATTERN_CACHE.put(regex, p);
-            } catch (TimeoutException e) {
-                compileFuture.cancel(true);
-                TIMEOUT_PATTERNS.add(regex);
-                log.warn("[PolicyFilter] Regex compile timeout, regex length={}", regex.length());
-                return false;
-            } catch (Exception e) {
-                log.debug("[PolicyFilter] Invalid regex pattern: {}", regex);
-                INVALID_PATTERNS.add(regex);
-                return false;
-            }
+
+        if (INVALID_PATTERNS.contains(regex)) {
+            return MatchOutcome.NOT_MATCHED;
         }
-        final Pattern finalP = p;
-        // ReDoS 방지: 타임아웃 내에서만 매칭 수행
+
+        Pattern pattern = getOrCompilePattern(regex);
+        if (pattern == null) {
+            return MatchOutcome.NOT_MATCHED;
+        }
+
+        final Pattern finalPattern = pattern;
         Future<Boolean> future;
         try {
-            future = REGEX_MATCH_EXECUTOR.submit(() -> finalP.matcher(input).find());
+            future = REGEX_MATCH_EXECUTOR.submit(() -> {
+                if (input == null) {
+                    return false;
+                }
+                return switch (matchMode) {
+                    case FULL_MATCH -> finalPattern.matcher(input).matches();
+                    case FIND -> finalPattern.matcher(input).find();
+                };
+            });
         } catch (RejectedExecutionException e) {
-            log.warn("[PolicyFilter] Regex executor queue full, skipping match");
-            return false;
+            throw new SecurityThrottlingException("Regex executor saturated", e);
         }
+
         try {
-            return future.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            Boolean matched = future.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            return Boolean.TRUE.equals(matched) ? MatchOutcome.MATCHED : MatchOutcome.NOT_MATCHED;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[PolicyFilter] Regex match interrupted");
+            return MatchOutcome.NOT_MATCHED;
         } catch (TimeoutException e) {
+            // cancel(true)는 get() 대기를 해제할 뿐, java.util.regex 실행 자체를 즉시 중단한다고 보장하지 않음
             future.cancel(true);
-            TIMEOUT_PATTERNS.add(regex);
-            log.warn("[PolicyFilter] Regex match timeout (ReDoS?), regex length={}, input length={}", regex.length(), input != null ? input.length() : 0);
-            return false;
+            log.warn("[PolicyFilter] Regex match timeout: regexLength={}, inputLength={}, mode={}",
+                    regex.length(),
+                    input != null ? input.length() : 0,
+                    matchMode);
+            return MatchOutcome.TIMED_OUT;
         } catch (Exception e) {
             log.debug("[PolicyFilter] Regex match error", e);
+            return MatchOutcome.NOT_MATCHED;
+        }
+    }
+
+    private Pattern getOrCompilePattern(String regex) {
+        Pattern pattern = PATTERN_CACHE.get(regex);
+        if (pattern != null) {
+            return pattern;
+        }
+
+        synchronized (PATTERN_CACHE) {
+            pattern = PATTERN_CACHE.get(regex);
+            if (pattern != null) {
+                return pattern;
+            }
+
+            try {
+                pattern = Pattern.compile(regex);
+                PATTERN_CACHE.put(regex, pattern);
+                return pattern;
+            } catch (PatternSyntaxException e) {
+                INVALID_PATTERNS.add(regex);
+                log.debug("[PolicyFilter] Invalid regex pattern: {}", regex, e);
+                return null;
+            } catch (Exception e) {
+                log.debug("[PolicyFilter] Regex compile error: {}", regex, e);
+                return null;
+            }
+        }
+    }
+
+    /**
+     * timeout 자체는 fail-open.
+     * 다만 단기간 반복되면 클라이언트 임시 차단으로 승격.
+     */
+    private boolean handleRegexTimeout(Long eventId,
+                                       String clientKey,
+                                       String blockKey,
+                                       String ruleType,
+                                       String path,
+                                       String clientIp,
+                                       String userAgent) {
+        String timeoutKey = REGEX_TIMEOUT_KEY_PREFIX + eventId + ":" + clientKey + ":" + ruleType;
+
+        try {
+            Long timeoutCount = incrementWithExpire(timeoutKey, REGEX_TIMEOUT_WINDOW_SECONDS);
+
+            log.warn("[PolicyFilter] Regex timeout detected: eventId={}, ruleType={}, path={}, key={}, ip={}, ua={}, timeoutCount={}",
+                    eventId, ruleType, path, clientKey, maskIp(clientIp), userAgent, timeoutCount);
+
+            if (timeoutCount != null && timeoutCount >= REGEX_TIMEOUT_THRESHOLD) {
+                redisTemplate.opsForValue().set(
+                        blockKey,
+                        "1",
+                        REGEX_TIMEOUT_BLOCK_MINUTES,
+                        TimeUnit.MINUTES
+                );
+
+                log.warn("[PolicyFilter] Client temporarily blocked by repeated regex timeouts: eventId={}, ruleType={}, key={}, count={}",
+                        eventId, ruleType, clientKey, timeoutCount);
+                return true;
+            }
+
+            return false;
+        } catch (DataAccessException e) {
+            log.error("[PolicyFilter] Redis error while recording regex timeout (Fail-Open): eventId={}, ruleType={}",
+                    eventId, ruleType, e);
             return false;
         }
+    }
+
+    private boolean isSensitivePath(String path) {
+        if (path == null) {
+            return false;
+        }
+        return path.startsWith("/queue/register");
     }
 
     private String resolveClientKey(String clientIp) {
@@ -291,15 +446,19 @@ public class PolicyFilter extends OncePerRequestFilter {
         if (!trustForwardedFor) {
             return request.getRemoteAddr();
         }
+
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
             return xff.split(",")[0].trim();
         }
+
         return request.getRemoteAddr();
     }
 
     private String maskIp(String ip) {
-        if (ip == null || ip.length() < 4) return "***";
+        if (ip == null || ip.length() < 4) {
+            return "***";
+        }
         return ip.substring(0, ip.length() / 2) + "***";
     }
 
@@ -309,5 +468,69 @@ public class PolicyFilter extends OncePerRequestFilter {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write(objectMapper.writeValueAsString(Map.of("message", message)));
         }
+    }
+
+    private enum MatchMode {
+        FULL_MATCH,
+        FIND
+    }
+
+    private enum MatchOutcome {
+        MATCHED,
+        NOT_MATCHED,
+        TIMED_OUT
+    }
+
+    private record RuleCheckResult(boolean blocked, boolean timedOut, boolean escalated) {
+        static RuleCheckResult blockedResult() {
+            return new RuleCheckResult(true, false, false);
+        }
+
+        static RuleCheckResult timedOutResult(boolean escalated) {
+            return new RuleCheckResult(false, true, escalated);
+        }
+
+        static RuleCheckResult notBlocked() {
+            return new RuleCheckResult(false, false, false);
+        }
+    }
+
+    private static class SecurityThrottlingException extends RuntimeException {
+        SecurityThrottlingException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    private Long incrementWithExpire(String key, long expireSeconds) {
+        return redisTemplate.execute(
+                INCR_WITH_EXPIRE_SCRIPT,
+                Collections.singletonList(key),
+                String.valueOf(expireSeconds)
+        );
+    }
+
+    private Long parseEventIdNode(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+
+        if (node.isNumber()) {
+            return node.asLong();
+        }
+
+        if (node.isTextual()) {
+            String value = node.asText();
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+
+            try {
+                return Long.parseLong(value.trim());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        return null;
     }
 }

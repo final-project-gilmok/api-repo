@@ -20,7 +20,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.Optional;
@@ -46,8 +45,6 @@ class PolicyServiceTest {
     private PolicyCacheRepository policyCacheRepository;
     @Mock
     private EventRepository eventRepository;
-    @Mock
-    private RabbitTemplate rabbitTemplate;
 
     @InjectMocks
     private PolicyService policyService;
@@ -143,6 +140,27 @@ class PolicyServiceTest {
             verify(eventRepository, never()).existsById(any());
 
         }
+
+        @Test
+        @DisplayName("캐시에 blockRules·maxRequestsPerSecond·blockDurationMinutes가 있으면 조회 응답에 포함된다 (PolicyFilter 연동)")
+        void getPolicyByEventId_cacheHit_includesFilterFields() {
+            Long eventId = 1L;
+            BlockRules blockRules = new BlockRules("^192\\.168\\..*", "BadBot|Scraper", null);
+            PolicyCacheDto cached = new PolicyCacheDto(
+                    true, eventId, 10, 5, 2L,
+                    blockRules, 50, 5, "ROUTING_ENABLED");
+            when(policyCacheRepository.find(eventId)).thenReturn(Optional.of(cached));
+
+            PolicyResponse response = policyService.getPolicyByEventId(eventId);
+
+            assertThat(response).isNotNull();
+            assertThat(response.blockRules()).isEqualTo(blockRules);
+            assertThat(response.blockRules().ipPattern()).isEqualTo("^192\\.168\\..*");
+            assertThat(response.blockRules().userAgentPattern()).isEqualTo("BadBot|Scraper");
+            assertThat(response.maxRequestsPerSecond()).isEqualTo(50);
+            assertThat(response.blockDurationMinutes()).isEqualTo(5);
+            verify(policyRepository, never()).findByEventId(any());
+        }
     }
 
     @Nested
@@ -233,6 +251,33 @@ class PolicyServiceTest {
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(PolicyErrorCode.POLICY_CONFLICT));
+        }
+
+        @Test
+        @DisplayName("blockRules·maxRequestsPerSecond·blockDurationMinutes로 업데이트 시 캐시에 반영된다 (PolicyFilter 연동)")
+        void updatePolicy_withFilterFields_savesToCacheForFilter() {
+            Long eventId = 1L;
+            Long updatedByUserId = 100L;
+            BlockRules blockRules = new BlockRules("^10\\.0\\.0\\..*", "curl|wget", null);
+            PolicyUpdateRequest request = new PolicyUpdateRequest(
+                    30, 20, blockRules, "ROUTING_ENABLED", 100, 15);
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            ArgumentCaptor<PolicyCacheDto> cacheCaptor = ArgumentCaptor.forClass(PolicyCacheDto.class);
+
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
+
+            assertThat(response.blockRules()).isEqualTo(blockRules);
+            assertThat(response.maxRequestsPerSecond()).isEqualTo(100);
+            assertThat(response.blockDurationMinutes()).isEqualTo(15);
+            verify(policyCacheRepository).save(eq(eventId), cacheCaptor.capture());
+            PolicyCacheDto savedCache = cacheCaptor.getValue();
+            assertThat(savedCache.exists()).isTrue();
+            assertThat(savedCache.blockRules()).isEqualTo(blockRules);
+            assertThat(savedCache.maxRequestsPerSecond()).isEqualTo(100);
+            assertThat(savedCache.blockDurationMinutes()).isEqualTo(15);
         }
     }
 }

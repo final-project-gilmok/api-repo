@@ -20,7 +20,6 @@ export default function Layout() {
           <Outlet />
         </main>
         <footer className="admin-footer">
-          <span>Made with V</span>
           <span>© 2026 gilmok. All rights reserved.</span>
         </footer>
       </div>
