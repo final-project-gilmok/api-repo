@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -65,6 +66,17 @@ public class PolicyFilter extends OncePerRequestFilter {
 
     /** timeout 기반 임시 차단 시간 */
     private static final long REGEX_TIMEOUT_BLOCK_MINUTES = 1L;
+
+    private static final DefaultRedisScript<Long> INCR_WITH_EXPIRE_SCRIPT = new DefaultRedisScript<>(
+            """
+            local current = redis.call('INCR', KEYS[1])
+            if current == 1 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return current
+            """,
+            Long.class
+    );
 
     private static final ExecutorService REGEX_MATCH_EXECUTOR = new ThreadPoolExecutor(
             4,
@@ -186,10 +198,7 @@ public class PolicyFilter extends OncePerRequestFilter {
                 long currentSecond = System.currentTimeMillis() / 1000;
                 String rlKey = RATE_LIMIT_KEY_PREFIX + eventId + ":" + clientKey + ":" + currentSecond;
 
-                Long count = redisTemplate.opsForValue().increment(rlKey);
-                if (count != null && count == 1L) {
-                    redisTemplate.expire(rlKey, 2, TimeUnit.SECONDS);
-                }
+                Long count = incrementWithExpire(rlKey, 2L);
 
                 if (count != null && count > maxRps) {
                     int blockMinutes = policy.blockDurationMinutes();
@@ -331,7 +340,12 @@ public class PolicyFilter extends OncePerRequestFilter {
         try {
             Boolean matched = future.get(REGEX_MATCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             return Boolean.TRUE.equals(matched) ? MatchOutcome.MATCHED : MatchOutcome.NOT_MATCHED;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[PolicyFilter] Regex match interrupted");
+            return MatchOutcome.NOT_MATCHED;
         } catch (TimeoutException e) {
+            // cancel(true)는 get() 대기를 해제할 뿐, java.util.regex 실행 자체를 즉시 중단한다고 보장하지 않음
             future.cancel(true);
             log.warn("[PolicyFilter] Regex match timeout: regexLength={}, inputLength={}, mode={}",
                     regex.length(),
@@ -385,10 +399,7 @@ public class PolicyFilter extends OncePerRequestFilter {
         String timeoutKey = REGEX_TIMEOUT_KEY_PREFIX + eventId + ":" + clientKey + ":" + ruleType;
 
         try {
-            Long timeoutCount = redisTemplate.opsForValue().increment(timeoutKey);
-            if (timeoutCount != null && timeoutCount == 1L) {
-                redisTemplate.expire(timeoutKey, REGEX_TIMEOUT_WINDOW_SECONDS, TimeUnit.SECONDS);
-            }
+            Long timeoutCount = incrementWithExpire(timeoutKey, REGEX_TIMEOUT_WINDOW_SECONDS);
 
             log.warn("[PolicyFilter] Regex timeout detected: eventId={}, ruleType={}, path={}, key={}, ip={}, ua={}, timeoutCount={}",
                     eventId, ruleType, path, clientKey, maskIp(clientIp), userAgent, timeoutCount);
@@ -490,5 +501,13 @@ public class PolicyFilter extends OncePerRequestFilter {
         SecurityThrottlingException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    private Long incrementWithExpire(String key, long expireSeconds) {
+        return redisTemplate.execute(
+                INCR_WITH_EXPIRE_SCRIPT,
+                Collections.singletonList(key),
+                String.valueOf(expireSeconds)
+        );
     }
 }
