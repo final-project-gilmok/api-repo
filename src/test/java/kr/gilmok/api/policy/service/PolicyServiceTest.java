@@ -20,7 +20,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.Optional;
@@ -46,8 +45,6 @@ class PolicyServiceTest {
     private PolicyCacheRepository policyCacheRepository;
     @Mock
     private EventRepository eventRepository;
-    @Mock
-    private RabbitTemplate rabbitTemplate;
 
     @InjectMocks
     private PolicyService policyService;
