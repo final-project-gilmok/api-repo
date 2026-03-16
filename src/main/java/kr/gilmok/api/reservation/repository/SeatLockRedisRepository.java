@@ -1,6 +1,7 @@
 package kr.gilmok.api.reservation.repository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
@@ -10,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class SeatLockRedisRepository {
@@ -77,6 +79,7 @@ public class SeatLockRedisRepository {
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
+            log.warn("Failed to parse seat availability value: {}", value);
             return 0;
         }
     }
