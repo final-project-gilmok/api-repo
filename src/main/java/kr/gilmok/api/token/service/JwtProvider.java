@@ -77,6 +77,7 @@ public class JwtProvider {
     public long getRemainingTtlSeconds(String token) {
         Date expiration = getClaims(token).getExpiration();
         long remainingMs = expiration.getTime() - System.currentTimeMillis();
-        return Math.max(remainingMs / 1000, 0L);
+        if (remainingMs <= 0) return 0L;
+        return Math.max((remainingMs + 999L) / 1000L, 1L);
     }
 }
