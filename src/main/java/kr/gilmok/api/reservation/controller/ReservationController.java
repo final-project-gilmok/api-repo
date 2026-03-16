@@ -108,6 +108,7 @@ public class ReservationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 사용자의 예약 접근 시도"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "예약 없음")
     })
     public ApiResponse<ReservationResponse> getReservation(
