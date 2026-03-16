@@ -60,7 +60,11 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
 
         // One-Time Token 검증: 이미 예약에 사용된 토큰인지 확인 (Redis blacklist)
         String jti = claims.getId();
-        if (jti != null && admissionTokenBlocklistRepository.isUsed(jti)) {
+        if (jti == null || jti.isBlank()) {
+            log.warn("[AdmissionInterceptor] jti 누락 토큰 감지");
+            throw new CustomException(AdmissionTokenErrorCode.INVALID_ADMISSION_TOKEN);
+        }
+        if (admissionTokenBlocklistRepository.isUsed(jti)) {
             log.warn("[AdmissionInterceptor] 이미 사용된 입장 토큰 재사용 시도 - jti: {}", jti);
             throw new CustomException(AdmissionTokenErrorCode.ALREADY_USED_ADMISSION_TOKEN);
         }

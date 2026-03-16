@@ -109,6 +109,21 @@ class AdmissionTokenInterceptorTest {
     }
 
     @Test
+    @DisplayName("토큰에 jti가 누락되었으면 INVALID_ADMISSION_TOKEN 예외가 발생한다")
+    void preHandle_missingJti_throwsException() {
+        // given
+        Claims claims = buildClaims(null, "ADMITTED"); // jti is null
+        given(jwtProvider.validateToken(TOKEN)).willReturn(true);
+        given(jwtProvider.getClaims(TOKEN)).willReturn(claims);
+
+        // when & then
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, new Object()))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                        .isEqualTo(AdmissionTokenErrorCode.INVALID_ADMISSION_TOKEN));
+    }
+
+    @Test
     @DisplayName("ADMITTED가 아닌 status를 가진 토큰이면 NOT_ADMITTED_STATUS 예외가 발생한다")
     void preHandle_wrongStatus_throwsException() {
         // given
