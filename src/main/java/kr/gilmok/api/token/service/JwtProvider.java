@@ -21,9 +21,9 @@ public class JwtProvider {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    // Payload 데이터를 받아 JWT 문자열로 생성
+    // Payload 데이터를 받아 JWT 문자열로 생성 (jti 포함)
     public String createToken(TokenPayload payload) {
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .setSubject(payload.sub())
                 .claim("id", payload.id())
                 .claim("status", payload.status())
@@ -34,8 +34,14 @@ public class JwtProvider {
                 // nbf와 exp는 초 단위(epoch)이므로 밀리초(*1000)로 변환해 Date 객체로 설정
                 .setNotBefore(new Date(payload.nbf() * 1000))
                 .setExpiration(new Date(payload.exp() * 1000))
-                .signWith(key, SignatureAlgorithm.HS256)
-                .compact();
+                .signWith(key, SignatureAlgorithm.HS256);
+
+        // jti가 있는 경우에만 설정 (One-Time Token 패턴)
+        if (payload.jti() != null) {
+            builder.setId(payload.jti());
+        }
+
+        return builder.compact();
     }
 
     // 토큰의 서명 및 만료 여부 검증
@@ -58,6 +64,19 @@ public class JwtProvider {
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
 
+    // 토큰에서 jti(JWT ID)를 추출
+    // Admission Token One-Time 패턴에서 사용: 예약 확정 후 해당 jti를 blacklist에 등록
+    public String getJti(String token) {
+        return getClaims(token).getId();
+    }
+
+    // 토큰의 남은 유효시간(초)을 반환
+    // blacklist TTL 설정에 사용
+    public long getRemainingTtlSeconds(String token) {
+        Date expiration = getClaims(token).getExpiration();
+        long remainingMs = expiration.getTime() - System.currentTimeMillis();
+        return Math.max(remainingMs / 1000, 0L);
     }
 }

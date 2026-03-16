@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class TokenService {
@@ -19,6 +21,7 @@ public class TokenService {
         long now = System.currentTimeMillis() / 1000;
 
         TokenPayload payload = TokenPayload.builder()
+                .jti(UUID.randomUUID().toString())  // One-Time Token 패턴: 예약 확정 후 무효화에 사용
                 .id(userId)
                 .sub(username)
                 .status("ADMITTED")

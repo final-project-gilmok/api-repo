@@ -5,6 +5,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import kr.gilmok.api.token.exception.AdmissionTokenErrorCode;
+import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.Arrays;
 public class AdmissionTokenInterceptor implements HandlerInterceptor {
 
     private final JwtProvider jwtProvider;
+    private final AdmissionTokenBlocklistRepository admissionTokenBlocklistRepository;
 
     private static final String ADMITTED_STATUS = "ADMITTED";
 
@@ -54,6 +56,13 @@ public class AdmissionTokenInterceptor implements HandlerInterceptor {
         if (!ADMITTED_STATUS.equals(status)) {
             log.warn("[AdmissionInterceptor] 인가되지 않은 토큰 상태: {}", status);
             throw new CustomException(AdmissionTokenErrorCode.NOT_ADMITTED_STATUS);
+        }
+
+        // One-Time Token 검증: 이미 예약에 사용된 토큰인지 확인 (Redis blacklist)
+        String jti = claims.getId();
+        if (jti != null && admissionTokenBlocklistRepository.isUsed(jti)) {
+            log.warn("[AdmissionInterceptor] 이미 사용된 입장 토큰 재사용 시도 - jti: {}", jti);
+            throw new CustomException(AdmissionTokenErrorCode.ALREADY_USED_ADMISSION_TOKEN);
         }
 
         // 다음 필터/컨트롤러에서 사용할 수 있도록 검증된 데이터를 Request에 담아줌

@@ -15,6 +15,7 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ public class ReservationService {
     private final QueueRedisRepository queueRedisRepository;
     private final MeterRegistry meterRegistry;
     private final JwtProvider jwtProvider;
+    private final AdmissionTokenBlocklistRepository admissionTokenBlocklistRepository;
 
     @Value("${reservation.seat-lock-ttl-seconds:300}")
     private int seatLockTtlSeconds;
@@ -175,6 +177,20 @@ public class ReservationService {
 
         meterRegistry.counter("reservation.success.total", "eventId", String.valueOf(reservation.getEvent().getId()))
                 .increment();
+
+        // Admission Token One-Time 무효화: 예약 확정 성공 후 해당 토큰을 blocklist에 등록하여 재사용 방지
+        try {
+            String jti = jwtProvider.getJti(admissionToken);
+            long remainingTtlSeconds = jwtProvider.getRemainingTtlSeconds(admissionToken);
+            if (jti != null && remainingTtlSeconds > 0) {
+                admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds);
+                log.info("[ReservationService] Admission token invalidated after confirm - jti: {}, remainingTtl: {}s",
+                        jti, remainingTtlSeconds);
+            }
+        } catch (Exception e) {
+            // 토큰 무효화 실패는 예약 확정 자체를 롤백시키지 않음
+            log.warn("[ReservationService] Admission token invalidation failed (non-critical): {}", e.getMessage());
+        }
 
         return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
