@@ -90,27 +90,15 @@ async function request(baseUrl, path, options = {}) {
             isRefreshing = true;
 
             try {
-                // 서버에 토큰 재발급 요청 (refreshToken을 JSON body로 전송)
-                const refreshToken = getCookie('refreshToken');
+                // 서버에 토큰 재발급 요청 (credentials: 'include'로 쿠키 자동 전송)
                 const reissueRes = await fetch(`${AUTH_BASE}/auth/reissue`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ refreshToken }),
                 });
 
                 if (reissueRes.ok) {
-                    // 재발급된 토큰을 쿠키에 저장
-                    const reissueData = await reissueRes.json().catch(() => ({}));
-                    const tokens = reissueData.data || reissueData;
-                    if (tokens.accessToken) {
-                        const maxAge = Math.floor((tokens.accessTokenExpiresIn || 1800000) / 1000);
-                        document.cookie = `accessToken=${tokens.accessToken}; path=/; max-age=${maxAge}`;
-                    }
-                    if (tokens.refreshToken) {
-                        document.cookie = `refreshToken=${tokens.refreshToken}; path=/; max-age=${7 * 24 * 3600}`;
-                    }
-
+                    // 서버가 Set-Cookie 헤더로 토큰을 갱신하므로 별도 저장 불필요
                     isRefreshing = false;
                     onRefreshed(); // 대기 중인 요청들 모두 실행
 
@@ -123,9 +111,8 @@ async function request(baseUrl, path, options = {}) {
                 isRefreshing = false;
                 onRefreshFailed(err); // 💡 대기 중인 요청들도 모두 에러 처리 (Pending 방지)
 
-                // 인증 정보 만료 시 쿠키 + 로컬 스토리지 정리 및 로그인 페이지 이동
-                document.cookie = 'accessToken=; path=/; max-age=0';
-                document.cookie = 'refreshToken=; path=/; max-age=0';
+                // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
+                // (HttpOnly 쿠키는 서버가 만료 처리)
                 localStorage.removeItem('isLoggedIn')
                 localStorage.removeItem('username')
                 localStorage.removeItem('role')
