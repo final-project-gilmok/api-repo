@@ -64,9 +64,9 @@ public class SeatLockRedisRepository {
 
         List<String> values = redisTemplate.opsForValue().multiGet(keys);
 
-        Map<Long, Integer> result = new HashMap<>();
+        Map<Long, Integer> result = new HashMap<>(seatIds.size());
         for (int i = 0; i < seatIds.size(); i++) {
-            String value = values != null ? values.get(i) : null;
+            String value = (values != null && i < values.size()) ? values.get(i) : null;
             result.put(seatIds.get(i), parseAvailable(value));
         }
         return result;
