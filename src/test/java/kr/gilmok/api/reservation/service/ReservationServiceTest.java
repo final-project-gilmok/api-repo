@@ -126,7 +126,6 @@ class ReservationServiceTest {
             when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
-            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
             when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -243,7 +242,7 @@ class ReservationServiceTest {
             verify(seatRepository).findByIdForUpdate(10L);
             // Admission Token One-Time 무효화 검증
             verify(jwtProvider).getJti("valid-token");
-            verify(admissionTokenBlocklistRepository).markAsUsed(any(), anyLong());
+            verify(admissionTokenBlocklistRepository).markAsUsed("test-jti-uuid", 240L);
         }
 
         @Test
