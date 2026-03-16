@@ -111,7 +111,7 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse confirmReservation(Long userId, String reservationCode, String admissionToken) {
-        // [수정] 입장용 토큰 검증 - Interceptor에서 1차 검증되었지만, Service에서도 JwtProvider로 정합성 체크
+        // 입장용 토큰 검증 - Interceptor에서 1차 검증되었지만, Service에서도 JwtProvider로 정합성 체크
         if (admissionToken == null || !jwtProvider.validateToken(admissionToken)) {
             throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
         }
@@ -179,18 +179,14 @@ public class ReservationService {
                 .increment();
 
         // Admission Token One-Time 무효화: 예약 확정 성공 후 해당 토큰을 blocklist에 등록하여 재사용 방지
-        try {
-            String jti = jwtProvider.getJti(admissionToken);
-            long remainingTtlSeconds = jwtProvider.getRemainingTtlSeconds(admissionToken);
-            if (jti != null && remainingTtlSeconds > 0) {
-                admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds);
-                log.info("[ReservationService] Admission token invalidated after confirm - jti: {}, remainingTtl: {}s",
-                        jti, remainingTtlSeconds);
-            }
-        } catch (Exception e) {
-            // 토큰 무효화 실패는 예약 확정 자체를 롤백시키지 않음
-            log.warn("[ReservationService] Admission token invalidation failed (non-critical): {}", e.getMessage());
+        String jti = jwtProvider.getJti(admissionToken);
+        long remainingTtlSeconds = jwtProvider.getRemainingTtlSeconds(admissionToken);
+        if (jti == null || remainingTtlSeconds <= 0) {
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
         }
+        admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds);
+        log.info("[ReservationService] Admission token invalidated after confirm - jti: {}, remainingTtl: {}s",
+                jti, remainingTtlSeconds);
 
         return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
