@@ -19,14 +19,8 @@ public class AdmissionTokenBlocklistRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
 
-    /**
-     * 사용된 admission token의 jti를 원자적으로 기록한다.
-     * 이미 기록된 경우(이미 사용된 경우) false를 반환한다.
-     *
-     * @param jti        토큰의 JWT ID
-     * @param ttlSeconds 보존 기간 (토큰 남은 유효시간, 초 단위)
-     * @return 처음 기록에 성공하면 true, 이미 존재하면 false
-     */
+    // 사용된 admission token의 jti를 원자적으로 저장
+    // 이미 저장된 경우(이미 사용된 경우) false를 반환
     public boolean markAsUsed(String jti, long ttlSeconds) {
         if (jti == null || jti.isBlank() || ttlSeconds <= 0) {
             return false;
@@ -36,15 +30,17 @@ public class AdmissionTokenBlocklistRepository {
                 "1",
                 ttlSeconds,
                 TimeUnit.SECONDS);
+
         return Boolean.TRUE.equals(created);
     }
 
-    /**
-     * jti가 이미 사용된 토큰인지 확인한다.
-     * 
-     * @return 사용된 토큰이면 true
-     */
+    // jti가 이미 사용된 토큰인지 확인
     public boolean isUsed(String jti) {
-        return redisTemplate.hasKey(KEY_PREFIX + jti);
+        if (jti == null || jti.isBlank()) {
+            return true;
+        }
+
+        // 사용된 토큰이면 true 반환
+        return Boolean.TRUE.equals(redisTemplate.hasKey(KEY_PREFIX + jti));
     }
 }
