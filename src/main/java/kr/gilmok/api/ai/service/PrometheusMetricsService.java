@@ -42,7 +42,7 @@ public class PrometheusMetricsService {
             // 💡 [수정] uriBuilder 내부의 중괄호 파싱 충돌을 막기 위해
             // uri(String uri, Map<String, ?> uriVariables) 형태를 사용합니다.
             String response = restClient.get()
-                    .uri("/api/query?query={query}", promQl)
+                    .uri("/api/v1/query?query={query}", promQl) // 👈 /api/ 뒤에 v1/ 추가
                     .retrieve()
                     .body(String.class);
 
