@@ -27,6 +27,8 @@ public class Reservation {
     @Column(nullable = false)
     private Long userId;
 
+    private String username;
+
     @Column(nullable = false)
     private int quantity;
 
@@ -43,10 +45,11 @@ public class Reservation {
     private LocalDateTime updatedAt;
 
     @Builder
-    public Reservation(Event event, Seat seat, Long userId, int quantity) {
+    public Reservation(Event event, Seat seat, Long userId, String username, int quantity) {
         this.event = event;
         this.seat = seat;
         this.userId = userId;
+        this.username = username;
         this.quantity = quantity;
         this.status = ReservationStatus.HOLDING;
         this.reservationCode = UUID.randomUUID().toString();

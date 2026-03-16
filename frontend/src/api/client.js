@@ -90,7 +90,7 @@ async function request(baseUrl, path, options = {}) {
             isRefreshing = true;
 
             try {
-                // 서버에 토큰 재발급 요청
+                // 서버에 토큰 재발급 요청 (credentials: 'include'로 쿠키 자동 전송)
                 const reissueRes = await fetch(`${AUTH_BASE}/auth/reissue`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -98,6 +98,7 @@ async function request(baseUrl, path, options = {}) {
                 });
 
                 if (reissueRes.ok) {
+                    // 서버가 Set-Cookie 헤더로 토큰을 갱신하므로 별도 저장 불필요
                     isRefreshing = false;
                     onRefreshed(); // 대기 중인 요청들 모두 실행
 
@@ -111,6 +112,7 @@ async function request(baseUrl, path, options = {}) {
                 onRefreshFailed(err); // 💡 대기 중인 요청들도 모두 에러 처리 (Pending 방지)
 
                 // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
+                // (HttpOnly 쿠키는 서버가 만료 처리)
                 localStorage.removeItem('isLoggedIn')
                 localStorage.removeItem('username')
                 localStorage.removeItem('role')
