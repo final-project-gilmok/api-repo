@@ -49,7 +49,7 @@ public class ReservationService {
     private String secretKey;
 
     @Transactional
-    public ReservationResponse createReservation(Long userId, ReservationCreateRequest request) {
+    public ReservationResponse createReservation(Long userId, String username, ReservationCreateRequest request) {
         // 수량 검증
         if (request.quantity() < 1 || request.quantity() > maxQuantity) {
             throw new CustomException(ReservationErrorCode.INVALID_QUANTITY);
@@ -91,7 +91,7 @@ public class ReservationService {
             // 예약 생성 (HOLDING 상태)
             Reservation reservation = Reservation.builder()
                     .event(event)
-                    .seat(seat).userId(userId)
+                    .seat(seat).userId(userId).username(username)
                     .quantity(request.quantity())
                     .build();
             saved = reservationRepository.save(reservation);
