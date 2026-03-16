@@ -15,6 +15,7 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +54,8 @@ class ReservationServiceTest {
     private MeterRegistry meterRegistry;
     @Mock
     private JwtProvider jwtProvider;
+    @Mock
+    private AdmissionTokenBlocklistRepository admissionTokenBlocklistRepository;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -123,6 +126,7 @@ class ReservationServiceTest {
             when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
+            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
             when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -223,6 +227,8 @@ class ReservationServiceTest {
             when(claims.get("id", Long.class)).thenReturn(1L);
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             when(jwtProvider.getClaims(anyString())).thenReturn(claims);
+            when(jwtProvider.getJti(anyString())).thenReturn("test-jti-uuid");
+            when(jwtProvider.getRemainingTtlSeconds(anyString())).thenReturn(240L);
 
             Counter counter = mock(Counter.class);
             when(meterRegistry.counter(eq("reservation.success.total"), eq("eventId"), eq("1")))
@@ -235,6 +241,9 @@ class ReservationServiceTest {
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
             verify(seatRepository).findByIdForUpdate(10L);
+            // Admission Token One-Time 무효화 검증
+            verify(jwtProvider).getJti("valid-token");
+            verify(admissionTokenBlocklistRepository).markAsUsed(any(), anyLong());
         }
 
         @Test
