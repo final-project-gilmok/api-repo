@@ -50,10 +50,14 @@ public class SeatLockRedisRepository {
 
     public int getAvailable(Long eventId, Long seatId) {
         String value = redisTemplate.opsForValue().get(availableKey(eventId, seatId));
-        return value != null ? Integer.parseInt(value) : 0;
+        return parseAvailable(value);
     }
 
     public Map<Long, Integer> getAvailableBulk(Long eventId, List<Long> seatIds) {
+        if (seatIds == null || seatIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
         List<String> keys = seatIds.stream()
                 .map(seatId -> availableKey(eventId, seatId))
                 .toList();
@@ -63,9 +67,18 @@ public class SeatLockRedisRepository {
         Map<Long, Integer> result = new HashMap<>();
         for (int i = 0; i < seatIds.size(); i++) {
             String value = values != null ? values.get(i) : null;
-            result.put(seatIds.get(i), value != null ? Integer.parseInt(value) : 0);
+            result.put(seatIds.get(i), parseAvailable(value));
         }
         return result;
+    }
+
+    private int parseAvailable(String value) {
+        if (value == null) return 0;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public void deleteAvailable(Long eventId, Long seatId) {
