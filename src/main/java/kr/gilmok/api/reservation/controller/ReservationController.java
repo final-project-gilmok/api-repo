@@ -41,6 +41,8 @@ public class ReservationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 값 검증 실패"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "대기열 검증 실패(NOT_ADMITTED)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "이벤트 또는 좌석 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "좌석 충돌 또는 상태 충돌")
     })
     public ApiResponse<ReservationResponse> create(
@@ -71,6 +73,7 @@ public class ReservationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "확정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 사용자의 예약 확정 시도"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "예약 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "상태 충돌")
     })
@@ -95,6 +98,7 @@ public class ReservationController {
     @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "다른 사용자의 예약 취소 시도"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "예약 없음")
     })
     public ApiResponse<ReservationResponse> cancel(
