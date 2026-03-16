@@ -15,6 +15,7 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.exception.AdmissionTokenErrorCode;
 import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
@@ -184,7 +185,10 @@ public class ReservationService {
         if (jti == null || remainingTtlSeconds <= 0) {
             throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
         }
-        admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds);
+        if (!admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds)) {
+            log.warn("[ReservationService] Admission token already used - jti: {}", jti);
+            throw new CustomException(AdmissionTokenErrorCode.ALREADY_USED_ADMISSION_TOKEN);
+        }
         log.info("[ReservationService] Admission token invalidated after confirm - jti: {}, remainingTtl: {}s",
                 jti, remainingTtlSeconds);
 
