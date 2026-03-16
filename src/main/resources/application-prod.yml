@@ -39,7 +39,7 @@ spring:
         api-key: ${GEMINI_API_KEY}
         chat:
           options:
-            model: "gemini-2.0-flash"
+            model: "gemini-2.5-flash"
 
 server:
   port: 8080
@@ -51,7 +51,7 @@ app:
 
 metrics:
   prometheus:
-    url: ${PROMETHEUS_URL:http://prometheus:9090}
+    url: ${PROMETHEUS_URL:http://158.180.78.71:9090}
 
 management:
   health:

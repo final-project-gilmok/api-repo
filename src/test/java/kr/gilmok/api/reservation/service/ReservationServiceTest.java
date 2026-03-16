@@ -120,13 +120,14 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
+            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(true);
             when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
 
             // when
-            ReservationResponse response = reservationService.createReservation(userId, request);
+            ReservationResponse response = reservationService.createReservation(userId, "testuser", request);
 
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.HOLDING);
@@ -147,11 +148,11 @@ class ReservationServiceTest {
             setField(event, "id", 1L);
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
 
             // when & then
-            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+            assertThatThrownBy(() -> reservationService.createReservation(userId, "testuser", request))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.EVENT_NOT_OPEN));
@@ -167,12 +168,12 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, otherEvent); // 다른 이벤트의 좌석
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
 
             // when & then
-            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+            assertThatThrownBy(() -> reservationService.createReservation(userId, "testuser", request))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.SEAT_NOT_BELONG_TO_EVENT));
@@ -187,13 +188,13 @@ class ReservationServiceTest {
             Seat seat = createSeat(10L, event);
             ReservationCreateRequest request = new ReservationCreateRequest(1L, 10L, 2, "queue-key-1");
 
-            when(queueRedisRepository.isAdmitted("1", "queue-key-1")).thenReturn(true);
+            when(queueRedisRepository.getQueueOwnerUserId("1", "queue-key-1")).thenReturn(1L);
             when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
             when(seatRepository.findById(10L)).thenReturn(Optional.of(seat));
             when(seatLockRedisRepository.lock(eq(1L), eq(10L), eq(userId), eq(2), anyInt())).thenReturn(false);
 
             // when & then
-            assertThatThrownBy(() -> reservationService.createReservation(userId, request))
+            assertThatThrownBy(() -> reservationService.createReservation(userId, "testuser", request))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(ReservationErrorCode.SEAT_LOCK_FAILED));

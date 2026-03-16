@@ -52,7 +52,7 @@ public class ReservationController {
         queueService.verifyQueueAccess(String.valueOf(request.eventId()), request.queueKey(), principal.user().id());
 
         // 2. 예약 생성 (좌석 선점)
-        ReservationResponse res = reservationService.createReservation(principal.user().id(), request);
+        ReservationResponse res = reservationService.createReservation(principal.user().id(), principal.getUsername(), request);
 
         // 3. 입장용 토큰 쿠키 발급 (예약 선점 성공 시에만)
         String token = tokenService.issueAdmissionToken(
