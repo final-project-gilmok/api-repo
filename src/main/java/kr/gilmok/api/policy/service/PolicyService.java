@@ -15,8 +15,6 @@ import kr.gilmok.api.policy.repository.PolicyHistoryRepository;
 import kr.gilmok.api.policy.repository.PolicyRepository;
 import kr.gilmok.api.policy.validation.BlockRulesValidator;
 import kr.gilmok.common.exception.CustomException;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,18 +33,15 @@ public class PolicyService {
     private final PolicyHistoryRepository historyRepository;
     private final PolicyCacheRepository policyCacheRepository;
     private final EventRepository eventRepository;
-    private final RabbitTemplate rabbitTemplate; // 실시간 반영 (Rabbit 비활성화 시 null)
 
     public PolicyService(PolicyRepository policyRepository,
                          PolicyHistoryRepository historyRepository,
                          PolicyCacheRepository policyCacheRepository,
-                         EventRepository eventRepository,
-                         @Autowired(required = false) RabbitTemplate rabbitTemplate) {
+                         EventRepository eventRepository) {
         this.policyRepository = policyRepository;
         this.historyRepository = historyRepository;
         this.policyCacheRepository = policyCacheRepository;
         this.eventRepository = eventRepository;
-        this.rabbitTemplate = rabbitTemplate;
     }
 
     @Transactional
@@ -67,13 +62,6 @@ public class PolicyService {
             policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
         } catch (Exception e) {
             log.warn("Redis policy cache save failed: eventId={}", eventId, e);
-        }
-        if (rabbitTemplate != null) {
-            try {
-                rabbitTemplate.convertAndSend("policy.exchange", "policy.updated", eventId);
-            } catch (Exception e) {
-                log.warn("Policy update message publish failed: eventId={}", eventId, e);
-            }
         }
     }
 
@@ -115,14 +103,6 @@ public class PolicyService {
             log.warn("Redis policy cache save failed: eventId={}", eventId, e);
         }
 
-        // 실시간 반영을 위한 메시지 발행 (Rabbit 활성화 시)
-        if (rabbitTemplate != null) {
-            try {
-                rabbitTemplate.convertAndSend("policy.exchange", "policy.updated", policy.getEventId());
-            } catch (Exception e) {
-                log.warn("Policy update message publish failed: eventId={}", eventId, e);
-            }
-        }
 
         return PolicyResponse.from(policy);
     }

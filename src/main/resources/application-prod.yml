@@ -51,7 +51,7 @@ app:
 
 metrics:
   prometheus:
-    url: ${PROMETHEUS_URL:http://prometheus:9090}
+    url: ${PROMETHEUS_URL:http://158.180.78.71:9090}
 
 management:
   health:

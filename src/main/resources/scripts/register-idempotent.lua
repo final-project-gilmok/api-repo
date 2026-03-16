@@ -12,7 +12,7 @@
 -- ARGV[5] = sessionTtlSeconds
 -- ARGV[6] = eventId
 --
--- Returns: {isNew, queueKeyString, rank}
+-- Returns: {isNew, queueKeyString, rank, waitingSize, admittedSize}
 --   isNew: -1 = already admitted (blocked), 0 = existing waiting (idempotent), 1 = newly registered
 
 local queueKey           = KEYS[1]
@@ -51,14 +51,14 @@ if existing then
   local admScore = redis.call('ZSCORE', admittedKey, existing)
   if admScore then
     upsertSession(existing, 'ADMITTED')
-    return {-1, existing, -1}
+    return {-1, existing, -1, redis.call('ZCARD', queueKey), redis.call('ZCARD', admittedKey)}
   end
 
   -- b) Still in waiting queue → session upsert (WAITING) + return idempotent
   local existingRank = redis.call('ZRANK', queueKey, existing)
   if existingRank ~= false and existingRank ~= nil then
     upsertSession(existing, 'WAITING')
-    return {0, existing, existingRank}
+    return {0, existing, existingRank, redis.call('ZCARD', queueKey), redis.call('ZCARD', admittedKey)}
   end
 
   -- c) Both gone (expired) → clean up index and re-register below
@@ -80,4 +80,4 @@ upsertSession(newQueueKeyVal, 'WAITING')
 local newRank = redis.call('ZRANK', queueKey, newQueueKeyVal)
 if newRank == false or newRank == nil then newRank = 0 end
 
-return {1, newQueueKeyVal, newRank}
+return {1, newQueueKeyVal, newRank, redis.call('ZCARD', queueKey), redis.call('ZCARD', admittedKey)}
