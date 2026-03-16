@@ -49,6 +49,10 @@ app:
     secret: ${JWT_SECRET}
   admitted-ttl-seconds: ${ADMITTED_TTL_SECONDS:300}
 
+# Swagger에서 Auth API 함께 보이게 (같은 서버·같은 호스트 기준)
+auth:
+  api-docs-url: ${AUTH_API_DOCS_URL:http://auth-server:9000/v3/api-docs}
+
 metrics:
   prometheus:
     url: ${PROMETHEUS_URL:http://158.180.78.71:9090}
