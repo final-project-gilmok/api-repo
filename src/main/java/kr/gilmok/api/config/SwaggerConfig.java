@@ -16,8 +16,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Slf4j
@@ -80,7 +82,11 @@ public class SwaggerConfig {
                 return;
             }
             try {
-                ResponseEntity<Map> response = new RestTemplate().getForEntity(authApiDocsUrl, Map.class);
+                SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+                factory.setConnectTimeout(Duration.ofSeconds(3));
+                factory.setReadTimeout(Duration.ofSeconds(5));
+                RestTemplate restTemplate = new RestTemplate(factory);
+                ResponseEntity<Map> response = restTemplate.getForEntity(authApiDocsUrl, Map.class);
                 if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                     return;
                 }
