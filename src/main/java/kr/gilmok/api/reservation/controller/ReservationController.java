@@ -1,6 +1,7 @@
 package kr.gilmok.api.reservation.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -69,7 +70,9 @@ public class ReservationController {
     }
 
     @PostMapping("/{code}/confirm")
-    @Operation(summary = "예약 확정", description = "입장 토큰 검증 후 예약을 확정하고 입장 토큰 쿠키를 만료 처리합니다.")
+    @Operation(
+            summary = "예약 확정",
+            description = "입장 토큰 검증 후 예약을 확정합니다.\n\n**필요 쿠키:** `admissionToken_{reservationCode}`")
     @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "확정 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
@@ -80,7 +83,7 @@ public class ReservationController {
     public ApiResponse<ReservationResponse> confirm(
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable String code,
-            @RequestAttribute(value = "admissionToken") String admissionToken,
+            @Parameter(hidden = true) @RequestAttribute(value = "admissionToken") String admissionToken,
             HttpServletResponse response) {
 
         // 1. 예약 확정 (내부에서 토큰 검증 수행)
