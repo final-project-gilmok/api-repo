@@ -34,6 +34,10 @@ reservation:
   seat-lock-ttl-seconds: 300
   max-quantity: 4
 
+# auth-repo OpenAPI 스펙 URL (같은 Swagger UI에서 API+Auth 함께 보기용, 비우면 api만 표시)
+auth:
+  api-docs-url: ${AUTH_API_DOCS_URL:http://localhost:9000/v3/api-docs}
+
 management:
   tracing:
     sampling:
