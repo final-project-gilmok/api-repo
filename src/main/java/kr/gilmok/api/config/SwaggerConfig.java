@@ -27,7 +27,7 @@ public class SwaggerConfig {
 
     private final ObjectMapper objectMapper;
 
-    @Value("${auth.api-docs-url:}")
+    @Value("${auth.api-docs-url:http://localhost:9000/v3/api-docs}")
     private String authApiDocsUrl;
 
     @Bean
@@ -60,6 +60,14 @@ public class SwaggerConfig {
         return GroupedOpenApi.builder()
                 .group("public")
                 .pathsToMatch("/users/**", "/reservations/**", "/queue/**", "/events/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi authApi() {
+        return GroupedOpenApi.builder()
+                .group("auth")
+                .pathsToMatch("/auth/**")
                 .build();
     }
 
