@@ -77,6 +77,8 @@ public class PolicyCacheRepository {
             redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
         } catch (JsonProcessingException e) {
             log.warn("Policy cache serialize failed: eventId={}, key={}", eventId, key, e);
+        } catch (DataAccessException e) {
+            log.warn("Policy cache save failed (Redis unavailable): eventId={}, key={}", eventId, key, e);
         }
     }
 

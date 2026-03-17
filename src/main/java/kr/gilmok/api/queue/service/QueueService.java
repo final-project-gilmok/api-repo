@@ -14,6 +14,7 @@ import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -142,7 +143,7 @@ public class QueueService {
     // === 3. 통합 입장 사이클 — 반환값 기반 메트릭 (Redis 추가 호출 최소화) ===
 
     @Retryable(
-            retryFor = {QueryTimeoutException.class, RedisConnectionFailureException.class},
+            retryFor = {QueryTimeoutException.class, RedisConnectionFailureException.class, DataAccessException.class},
             maxAttempts = 3,
             backoff = @Backoff(delay = 500, multiplier = 2)
     )
