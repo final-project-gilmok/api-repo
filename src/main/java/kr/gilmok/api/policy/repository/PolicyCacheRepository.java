@@ -28,6 +28,7 @@ public class PolicyCacheRepository {
 
     private final long ttlSecondsPositive;
     private final long ttlSecondsNegative;
+    private final long joinTimeoutMs;
 
     private final Semaphore dbFallbackSemaphore;
 
@@ -44,6 +45,7 @@ public class PolicyCacheRepository {
             @Value("${policy.cache.negative-ttl-minutes:5}") long negativeTtlMinutes,
             @Value("${policy.local-cache.ttl-seconds:60}") long localCacheTtlSeconds,
             @Value("${policy.local-cache.maximum-size:1000}") long localCacheMaximumSize,
+            @Value("${policy.db-fallback.join-timeout-ms:500}") long joinTimeoutMs,
             @Value("${policy.db-fallback.max-concurrency:5}") int dbFallbackMaxConcurrency
     ) {
         this.redisTemplate = redisTemplate;
@@ -51,6 +53,7 @@ public class PolicyCacheRepository {
         this.policyRepository = policyRepository;
         this.ttlSecondsPositive = ttlHours * 3600L;
         this.ttlSecondsNegative = negativeTtlMinutes * 60L;
+        this.joinTimeoutMs = joinTimeoutMs;
         this.dbFallbackSemaphore = new Semaphore(dbFallbackMaxConcurrency);
 
         this.localCache = Caffeine.newBuilder()
@@ -117,7 +120,7 @@ public class PolicyCacheRepository {
         if (existing != null) {
             log.debug("Join in-flight policy fetch: eventId={}", eventId);
             try {
-                return existing.get(500, TimeUnit.MILLISECONDS);
+                return existing.get(joinTimeoutMs, TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 log.warn("In-flight join timed out: eventId={}", eventId);
                 return Optional.empty();
@@ -154,7 +157,7 @@ public class PolicyCacheRepository {
 
         PolicyCacheDto dto;
         try {
-            log.warn("Policy fallback to DB: eventId={}", eventId);
+            log.info("Policy fallback to DB: eventId={}", eventId);
 
             Optional<Policy> policyOpt = policyRepository.findByEventId(eventId);
 
