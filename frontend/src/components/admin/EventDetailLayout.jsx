@@ -1,4 +1,6 @@
-import { Outlet, useParams, NavLink } from 'react-router-dom'
+import { Outlet, useParams, NavLink, useLocation, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { getEvent } from '../../api/events.js'
 
 const eventTabs = [
   { to: 'policy', label: '정책 설정' },
@@ -10,9 +12,40 @@ const eventTabs = [
 
 export default function EventDetailLayout() {
   const { eventId } = useParams()
+  const location = useLocation()
+  const [eventName, setEventName] = useState('')
+
+  useEffect(() => {
+    if (!eventId) return
+    setEventName('')
+    getEvent(eventId)
+      .then((res) => {
+        const ev = res?.data ?? res
+        setEventName(ev?.name ?? '')
+      })
+      .catch(() => setEventName(''))
+  }, [eventId])
+
+  const currentMenuLabel = useMemo(() => {
+    if (!eventId) return ''
+    const prefix = `/admin/events/${eventId}/`
+    const rest = location.pathname.startsWith(prefix) ? location.pathname.slice(prefix.length) : ''
+    const segment = (rest.split('/')[0] || '').trim()
+    const found = eventTabs.find((t) => t.to === segment)
+    return found?.label ?? ''
+  }, [eventId, location.pathname])
 
   return (
     <>
+      <div className="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <h1 className="h4 fw-bold mb-0">{eventName || '-'}</h1>
+          {currentMenuLabel && <div className="text-muted small mt-1">{currentMenuLabel}</div>}
+        </div>
+        <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
+          돌아가기
+        </Link>
+      </div>
       <nav className="nav nav-tabs mb-3 flex-nowrap overflow-auto">
         {eventTabs.map(({ to, label }) => (
           <NavLink

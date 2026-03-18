@@ -91,13 +91,6 @@ export default function AdminSeatManagement() {
 
     return (
         <>
-            <div className="d-flex align-items-center justify-content-between mb-3">
-                <h1 className="h4 fw-bold mb-0">좌석 관리 - 이벤트 #{eventId}</h1>
-                <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
-                    돌아가기
-                </Link>
-            </div>
-
             <div className="card border rounded-3">
                 <div className="card-body">
                     <p className="text-muted small mb-3">

@@ -79,16 +79,6 @@ export default function AIRecommendation() {
 
     return (
         <div className="d-flex flex-column gap-4">
-            {/* 상단 헤더 영역 */}
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <h1 className="h3 fw-bold mb-1">AI 정책 추천</h1>
-                    <p className="text-muted small mb-0">
-                        현재 트래픽과 메트릭을 기반으로 이벤트 운영 정책을 자동으로 제안합니다.
-                    </p>
-                </div>
-            </div>
-
             {/* 분석 전 상태 */}
             {!aiData && (
                 <div className="card">

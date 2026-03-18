@@ -29,15 +29,8 @@ export default function Monitoring() {
 
   return (
     <div className="d-flex flex-column gap-4">
-      {/* 상단 헤더 영역 */}
-      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <h1 className="h3 fw-bold mb-1">모니터링</h1>
-          <p className="text-muted small mb-0">
-            시스템 메트릭과 최근 API 요청 로그를 한눈에 확인합니다.
-          </p>
-        </div>
-        {eventId && (
+      {eventId && (
+        <div className="d-flex justify-content-end">
           <button
             type="button"
             className="btn btn-primary btn-sm"
@@ -45,8 +38,8 @@ export default function Monitoring() {
           >
             AI 트래픽 분석 및 정책 추천
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Grafana 메트릭 카드 */}
       <div className="card">

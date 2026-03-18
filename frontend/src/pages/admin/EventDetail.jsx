@@ -89,8 +89,6 @@ export default function EventDetail() {
 
   return (
     <>
-      <h1 className="h3 mb-1 fw-bold">이벤트 상세</h1>
-      <p className="text-muted mb-4">{ev.name}</p>
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
