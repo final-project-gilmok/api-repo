@@ -40,7 +40,7 @@ public record PolicyCacheDto(
                 0L,
                 BlockRules.empty(),
                 0,
-                10,
+                0,
                 null
         );
     }
