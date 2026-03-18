@@ -243,9 +243,7 @@ public class PolicyCacheRepository {
 
 
     public void evict(Long eventId) {
-        if (eventId == null) {
-            return;
-        }
+        if (eventId == null) return;
 
         String key = KEY_PREFIX + eventId;
 
@@ -254,11 +252,16 @@ public class PolicyCacheRepository {
             if (Boolean.TRUE.equals(removed)) {
                 log.debug("Policy cache evicted from Redis: eventId={}", eventId);
             }
+        } catch (RedisCommandTimeoutException | QueryTimeoutException e) {
+            // ✅ 타임아웃 예외 추가 — 로컬 캐시 무효화는 finally에서 항상 실행
+            log.warn("Policy cache evict timeout from Redis: eventId={}, key={}", eventId, key, e);
         } catch (DataAccessException e) {
             log.warn("Policy cache evict failed from Redis: eventId={}, key={}", eventId, key, e);
+        } finally {
+            // ✅ Redis 예외 여부와 무관하게 로컬 캐시는 항상 무효화
+            localCache.invalidate(eventId);
+            inFlight.remove(eventId);
         }
-
-        localCache.invalidate(eventId);
-        inFlight.remove(eventId);
     }
+
 }

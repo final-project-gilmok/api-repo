@@ -301,14 +301,24 @@ public class QueueService {
     // === AI용 메트릭 조회 ===
 
     public Map<String, Long> getQueueMetricsForAi(String eventId) {
-        Long waitingSize = queueRedisRepository.getQueueSize(eventId);
-        Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
-        Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000);
-
         Map<String, Long> metrics = new HashMap<>();
-        metrics.put("waitingQueueSize", waitingSize != null ? waitingSize : 0L);
-        metrics.put("admittedQueueSize", admittedSize != null ? admittedSize : 0L);
-        metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
+        metrics.put("waitingQueueSize", 0L);
+        metrics.put("admittedQueueSize", 0L);
+        metrics.put("currentRps", 0L);
+
+        try {
+            Long waitingSize = queueRedisRepository.getQueueSize(eventId);
+            Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+            Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000);
+
+            metrics.put("waitingQueueSize", waitingSize != null ? waitingSize : 0L);
+            metrics.put("admittedQueueSize", admittedSize != null ? admittedSize : 0L);
+            metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
+        } catch (Exception e) {
+            // ✅ Redis 장애 시 0값 기본 메트릭 반환 — AI 서비스 호출 끊기지 않음
+            log.warn("[QueueService] getQueueMetricsForAi failed, returning defaults: eventId={}", eventId, e);
+        }
+
         return metrics;
     }
 }

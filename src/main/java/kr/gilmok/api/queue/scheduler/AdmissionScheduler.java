@@ -84,8 +84,15 @@ public class AdmissionScheduler {
                 throw e;
             } catch (Exception e) {
                 log.error("Admission processing failed for eventId={}", eventId, e);
-            }   finally {
-                if (locked) queueRedisRepository.unlock(eventId, lockValue);
+            } finally {
+                if (locked) {
+                    try {
+                        queueRedisRepository.unlock(eventId, lockValue); // ✅ unlock 예외 격리
+                    } catch (Exception unlockEx) {
+                        // unlock 실패는 Circuit Breaker 실패로 전파되면 안 됨 — 경고만 기록
+                        log.warn("Failed to unlock admission lock: eventId={}", eventId, unlockEx);
+                    }
+                }
             }
         }
 
