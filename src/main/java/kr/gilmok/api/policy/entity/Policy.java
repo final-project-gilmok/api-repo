@@ -45,6 +45,9 @@ public class Policy {
 
     private Long updatedByUserId;
 
+    @Column(length = 50)
+    private String updatedByUsername;
+
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
@@ -61,7 +64,7 @@ public class Policy {
     }
 
     public void updatePolicy(int rps, int concurrency, BlockRules rules,
-                            String gateMode, Long updatedByUserId,
+                            String gateMode, Long updatedByUserId, String updatedByUsername,
                             Integer maxRequestsPerSecond, Integer blockDurationMinutes) {
         this.admissionRps = rps;
         this.admissionConcurrency = concurrency;
@@ -70,11 +73,25 @@ public class Policy {
             this.gateMode = gateMode;
         }
         this.updatedByUserId = updatedByUserId;
+        this.updatedByUsername = updatedByUsername;
         if (maxRequestsPerSecond != null && maxRequestsPerSecond >= 0) {
             this.maxRequestsPerSecond = maxRequestsPerSecond;
         }
         if (blockDurationMinutes != null && blockDurationMinutes >= 0) {
             this.blockDurationMinutes = blockDurationMinutes;
         }
+    }
+
+    public void applyFromHistory(PolicyHistory history, Long rollbackByUserId, String rollbackByUsername) {
+        this.admissionRps = history.getAdmissionRps();
+        this.admissionConcurrency = history.getAdmissionConcurrency();
+        this.blockRules = history.getBlockRules();
+        if (history.getGateMode() != null && !history.getGateMode().isBlank()) {
+            this.gateMode = history.getGateMode();
+        }
+        this.maxRequestsPerSecond = history.getMaxRequestsPerSecond();
+        this.blockDurationMinutes = history.getBlockDurationMinutes();
+        this.updatedByUserId = rollbackByUserId;
+        this.updatedByUsername = rollbackByUsername;
     }
 }

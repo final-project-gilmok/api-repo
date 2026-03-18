@@ -45,6 +45,9 @@ public class PolicyHistory {
 
     private Long updatedByUserId;
 
+    @Column(length = 50)
+    private String updatedByUsername;
+
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt; // 언제 바뀌었는지 기록
@@ -61,6 +64,7 @@ public class PolicyHistory {
                 .blockDurationMinutes(policy.getBlockDurationMinutes())
                 .gateMode(policy.getGateMode())
                 .updatedByUserId(policy.getUpdatedByUserId())
+                .updatedByUsername(policy.getUpdatedByUsername())
                 .build();
     }
 }

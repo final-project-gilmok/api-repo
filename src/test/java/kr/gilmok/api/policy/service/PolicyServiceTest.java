@@ -3,9 +3,11 @@ package kr.gilmok.api.policy.service;
 import kr.gilmok.api.event.exception.EventErrorCode;
 import kr.gilmok.api.event.repository.EventRepository;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
+import kr.gilmok.api.policy.dto.PolicyHistoryResponse;
 import kr.gilmok.api.policy.dto.PolicyResponse;
 import kr.gilmok.api.policy.dto.PolicyUpdateRequest;
 import kr.gilmok.api.policy.entity.Policy;
+import kr.gilmok.api.policy.entity.PolicyHistory;
 import kr.gilmok.api.policy.exception.PolicyErrorCode;
 import kr.gilmok.api.policy.repository.PolicyCacheRepository;
 import kr.gilmok.api.policy.repository.PolicyHistoryRepository;
@@ -20,8 +22,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -174,7 +181,7 @@ class PolicyServiceTest {
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, BlockRules.empty());
             when(eventRepository.existsById(eventId)).thenReturn(false);
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L, "admin"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
@@ -193,7 +200,7 @@ class PolicyServiceTest {
 
             ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
 
-            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId, "admin");
 
             assertThat(response.policyVersion()).isEqualTo(1L);
             verify(historyRepository, never()).save(any());
@@ -216,7 +223,7 @@ class PolicyServiceTest {
 
             ArgumentCaptor<Policy> policyCaptor = ArgumentCaptor.forClass(Policy.class);
 
-            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId, "admin");
 
             assertThat(response.policyVersion()).isEqualTo(1L);
             verify(historyRepository).save(any());
@@ -231,7 +238,7 @@ class PolicyServiceTest {
             Long eventId = 1L;
             PolicyUpdateRequest request = new PolicyUpdateRequest(10, 5, BlockRules.empty());
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, null, "admin"))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("updatedByUserId must not be null");
             verify(policyRepository, never()).saveAndFlush(any());
@@ -247,7 +254,7 @@ class PolicyServiceTest {
             when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
             when(policyRepository.saveAndFlush(any(Policy.class))).thenThrow(new ObjectOptimisticLockingFailureException(Policy.class, 1L));
 
-            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L))
+            assertThatThrownBy(() -> policyService.updatePolicy(eventId, request, 1L, "admin"))
                     .isInstanceOf(CustomException.class)
                     .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
                             .isEqualTo(PolicyErrorCode.POLICY_CONFLICT));
@@ -267,7 +274,7 @@ class PolicyServiceTest {
 
             ArgumentCaptor<PolicyCacheDto> cacheCaptor = ArgumentCaptor.forClass(PolicyCacheDto.class);
 
-            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId);
+            PolicyResponse response = policyService.updatePolicy(eventId, request, updatedByUserId, "admin");
 
             assertThat(response.blockRules()).isEqualTo(blockRules);
             assertThat(response.maxRequestsPerSecond()).isEqualTo(100);
@@ -278,6 +285,196 @@ class PolicyServiceTest {
             assertThat(savedCache.blockRules()).isEqualTo(blockRules);
             assertThat(savedCache.maxRequestsPerSecond()).isEqualTo(100);
             assertThat(savedCache.blockDurationMinutes()).isEqualTo(15);
+        }
+    }
+
+    @Nested
+    @DisplayName("정책 히스토리 조회")
+    class GetPolicyHistories {
+
+        @Test
+        @DisplayName("이벤트가 없으면 EVENT_NOT_FOUND 예외가 발생한다")
+        void getPolicyHistories_eventNotExists_throwsEventNotFound() {
+            Long eventId = 999L;
+            when(eventRepository.existsById(eventId)).thenReturn(false);
+
+            assertThatThrownBy(() -> policyService.getPolicyHistories(eventId, PageRequest.of(0, 20)))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
+            verify(historyRepository, never()).findByEventIdOrderByCreatedAtDesc(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("이벤트가 있으면 히스토리를 최신순 페이징으로 반환한다")
+        void getPolicyHistories_eventExists_returnsPage() {
+            Long eventId = 1L;
+            PolicyHistory h = PolicyHistory.builder()
+                    .id(1L)
+                    .eventId(eventId)
+                    .admissionRps(10)
+                    .admissionConcurrency(5)
+                    .policyVersion(1L)
+                    .maxRequestsPerSecond(100)
+                    .blockDurationMinutes(10)
+                    .blockRules(BlockRules.empty())
+                    .gateMode("ROUTING_ENABLED")
+                    .updatedByUserId(100L)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            Page<PolicyHistory> page = new PageImpl<>(List.of(h), PageRequest.of(0, 20), 1);
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(historyRepository.findByEventIdOrderByCreatedAtDesc(eq(eventId), any(PageRequest.class)))
+                    .thenReturn(page);
+
+            Page<PolicyHistoryResponse> result = policyService.getPolicyHistories(eventId, PageRequest.of(0, 20));
+
+            assertThat(result).isNotNull();
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().get(0).id()).isEqualTo(1L);
+            assertThat(result.getContent().get(0).eventId()).isEqualTo(eventId);
+            assertThat(result.getContent().get(0).admissionRps()).isEqualTo(10);
+            verify(historyRepository).findByEventIdOrderByCreatedAtDesc(eq(eventId), any(PageRequest.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("정책 롤백")
+    class RollbackPolicy {
+
+        @Test
+        @DisplayName("이벤트가 없으면 EVENT_NOT_FOUND 예외가 발생한다")
+        void rollbackPolicy_eventNotExists_throwsEventNotFound() {
+            Long eventId = 999L;
+            when(eventRepository.existsById(eventId)).thenReturn(false);
+
+            assertThatThrownBy(() -> policyService.rollbackPolicy(eventId, 1L, 1L, "admin"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(EventErrorCode.EVENT_NOT_FOUND));
+            verify(historyRepository, never()).findByIdAndEventId(anyLong(), anyLong());
+        }
+
+        @Test
+        @DisplayName("히스토리가 해당 이벤트 소유가 아니면 POLICY_HISTORY_NOT_FOUND 예외가 발생한다")
+        void rollbackPolicy_historyNotFound_throwsPolicyHistoryNotFound() {
+            Long eventId = 1L;
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(historyRepository.findByIdAndEventId(42L, eventId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> policyService.rollbackPolicy(eventId, 42L, 1L, "admin"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(PolicyErrorCode.POLICY_HISTORY_NOT_FOUND));
+            verify(policyRepository, never()).findByEventId(anyLong());
+        }
+
+        @Test
+        @DisplayName("정책이 없으면 POLICY_NOT_FOUND 예외가 발생한다")
+        void rollbackPolicy_policyNotFound_throwsPolicyNotFound() {
+            Long eventId = 1L;
+            PolicyHistory history = PolicyHistory.builder()
+                    .id(1L)
+                    .eventId(eventId)
+                    .admissionRps(10)
+                    .admissionConcurrency(5)
+                    .policyVersion(1L)
+                    .maxRequestsPerSecond(100)
+                    .blockDurationMinutes(10)
+                    .blockRules(BlockRules.empty())
+                    .gateMode("ROUTING_ENABLED")
+                    .updatedByUserId(100L)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(historyRepository.findByIdAndEventId(1L, eventId)).thenReturn(Optional.of(history));
+            when(policyRepository.findByEventId(eventId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> policyService.rollbackPolicy(eventId, 1L, 1L, "admin"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(PolicyErrorCode.POLICY_NOT_FOUND));
+            verify(historyRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("롤백 성공 시 현재 정책을 히스토리에 저장하고 선택한 히스토리로 복원 후 캐시를 갱신한다")
+        void rollbackPolicy_success_savesHistoryAppliesAndUpdatesCache() {
+            Long eventId = 1L;
+            Long rollbackByUserId = 200L;
+            Policy policy = new Policy(eventId);
+            policy.updatePolicy(50, 30, BlockRules.empty(), "ROUTING_ENABLED", 100L, "someone", 200, 15);
+            PolicyHistory history = PolicyHistory.builder()
+                    .id(10L)
+                    .eventId(eventId)
+                    .admissionRps(10)
+                    .admissionConcurrency(5)
+                    .policyVersion(1L)
+                    .maxRequestsPerSecond(100)
+                    .blockDurationMinutes(10)
+                    .blockRules(BlockRules.empty())
+                    .gateMode("ROUTING_ENABLED")
+                    .updatedByUserId(100L)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(historyRepository.findByIdAndEventId(10L, eventId)).thenReturn(Optional.of(history));
+            when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
+            when(historyRepository.save(any(PolicyHistory.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(policyRepository.saveAndFlush(any(Policy.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            PolicyResponse response = policyService.rollbackPolicy(eventId, 10L, rollbackByUserId, "admin");
+
+            assertThat(response).isNotNull();
+            assertThat(response.admissionRps()).isEqualTo(10);
+            assertThat(response.admissionConcurrency()).isEqualTo(5);
+            assertThat(response.maxRequestsPerSecond()).isEqualTo(100);
+            assertThat(response.blockDurationMinutes()).isEqualTo(10);
+            verify(historyRepository).save(any(PolicyHistory.class));
+            verify(policyRepository).saveAndFlush(policy);
+            verify(policyCacheRepository).save(eq(eventId), any(PolicyCacheDto.class));
+        }
+
+        @Test
+        @DisplayName("rollbackByUserId가 null이면 NullPointerException이 발생한다")
+        void rollbackPolicy_nullRollbackByUserId_throwsException() {
+            Long eventId = 1L;
+
+            assertThatThrownBy(() -> policyService.rollbackPolicy(eventId, 1L, null, "admin"))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("rollbackByUserId must not be null");
+            verify(historyRepository, never()).findByIdAndEventId(anyLong(), anyLong());
+        }
+
+        @Test
+        @DisplayName("롤백 저장 시 낙관적 락 충돌이 나면 POLICY_CONFLICT 예외가 발생한다")
+        void rollbackPolicy_optimisticLockConflict_throwsPolicyConflict() {
+            Long eventId = 1L;
+            Policy policy = new Policy(eventId);
+            PolicyHistory history = PolicyHistory.builder()
+                    .id(1L)
+                    .eventId(eventId)
+                    .admissionRps(10)
+                    .admissionConcurrency(5)
+                    .policyVersion(1L)
+                    .maxRequestsPerSecond(100)
+                    .blockDurationMinutes(10)
+                    .blockRules(BlockRules.empty())
+                    .gateMode("ROUTING_ENABLED")
+                    .updatedByUserId(100L)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            when(eventRepository.existsById(eventId)).thenReturn(true);
+            when(historyRepository.findByIdAndEventId(1L, eventId)).thenReturn(Optional.of(history));
+            when(policyRepository.findByEventId(eventId)).thenReturn(Optional.of(policy));
+            when(historyRepository.save(any(PolicyHistory.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(policyRepository.saveAndFlush(any(Policy.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException(Policy.class, 1L));
+
+            assertThatThrownBy(() -> policyService.rollbackPolicy(eventId, 1L, 1L, "admin"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(PolicyErrorCode.POLICY_CONFLICT));
         }
     }
 }
