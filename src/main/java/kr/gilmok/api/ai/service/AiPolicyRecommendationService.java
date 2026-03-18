@@ -3,6 +3,7 @@ package kr.gilmok.api.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.gilmok.api.ai.dto.AiPolicyRecommendationDto;
+import kr.gilmok.api.ai.dto.ServerSpecRequest;
 import kr.gilmok.api.ai.entity.AiErrorCode;
 import kr.gilmok.api.ai.entity.AiRecommendation;
 import kr.gilmok.api.ai.repository.AiRecommendationRepository;
@@ -29,47 +30,67 @@ public class AiPolicyRecommendationService {
     private final AiRecommendationRepository aiRecommendationRepository;
     private final ObjectMapper objectMapper;
 
-    // eventId와 요청한 관리자 ID를 함께 받습니다.
-    public AiPolicyRecommendationDto getRecommendation(Long eventId, Long adminUserId) {
-
-        // 1. 실제 데이터 수집
-        // eventId를 Long으로 넘겨주거나 내부적으로 String 변환 처리 필요 (queueService 스펙에 맞춤)
+    public AiPolicyRecommendationDto getRecommendation(Long eventId, Long adminUserId,
+                                                       ServerSpecRequest serverSpec) {
+        // 1. 데이터 수집
         Map<String, Long> queueMetrics = queueService.getQueueMetricsForAi(String.valueOf(eventId));
         String errorRateInfo = prometheusMetricsService.getCurrentErrorRate();
 
-        // 2. 스냅샷 데이터(Map) 구성
+        // 2. 스냅샷 구성
         Map<String, Object> snapshotData = new HashMap<>(queueMetrics);
         snapshotData.put("errorRate", errorRateInfo);
+        if (serverSpec != null && serverSpec.hasAnySpec()) {
+            snapshotData.put("serverSpec", serverSpec);
+        }
 
         long waitingSize = queueMetrics.getOrDefault("waitingQueueSize", 0L);
         long currentRps = queueMetrics.getOrDefault("currentRps", 0L);
 
-        // 3. 프롬프트 동적 생성
+        // 3. 서버 스펙 섹션 조건부 생성
+        String serverSpecSection = "";
+        if (serverSpec != null && serverSpec.hasAnySpec()) {
+            StringBuilder sb = new StringBuilder("[서버 스펙]\n");
+            if (serverSpec.instanceType() != null)
+                sb.append("- 인스턴스 타입: ").append(serverSpec.instanceType()).append("\n");
+            if (serverSpec.cpuCores() != null)
+                sb.append("- CPU 코어: ").append(serverSpec.cpuCores()).append("개\n");
+            if (serverSpec.memoryGb() != null)
+                sb.append("- 메모리: ").append(serverSpec.memoryGb()).append("GB\n");
+            if (serverSpec.replicaCount() != null)
+                sb.append("- 레플리카 수: ").append(serverSpec.replicaCount()).append("대\n");
+            serverSpecSection = sb.toString() + "\n";
+        }
+
+        // 4. 프롬프트 구성
         String promptMessage = String.format(
-                "현재 서버 상태를 분석해서 트래픽 제어 정책을 JSON으로 추천해줘.\n" +
+                "%s" +
+                        "[실시간 메트릭]\n" +
                         "- 현재 큐 대기열: %d명\n" +
                         "- 현재 유입 RPS: %d\n" +
                         "- 최근 1분간 5xx 에러율: %s",
-                waitingSize, currentRps, errorRateInfo
+                serverSpecSection, waitingSize, currentRps, errorRateInfo
         );
 
         log.info("Sending prompt to AI: {}", promptMessage);
 
-        // 4. AI 호출
+        // 5. AI 호출
         AiPolicyRecommendationDto responseDto;
         try {
             responseDto = chatClient.prompt()
-                    .system("너는 트래픽 제어 시스템의 수석 SRE 엔지니어 봇이야.")
+                    .system("""
+                            너는 트래픽 제어 시스템의 수석 SRE 엔지니어 봇이야.
+                            서버 스펙 정보가 주어진 경우 recommendedServerSpec 필드에 스펙 조정 추천을 반드시 포함해줘.
+                            서버 스펙 정보가 없으면 recommendedServerSpec은 null로 반환해줘.
+                            """)
                     .user(promptMessage)
                     .call()
                     .entity(AiPolicyRecommendationDto.class);
         } catch (Exception e) {
             log.error("AI 호출 실패: eventId={}", eventId, e);
-            throw new CustomException(AiErrorCode.AI_RECOMMENDATION_FAILED); // AI001
+            throw new CustomException(AiErrorCode.AI_RECOMMENDATION_FAILED);
         }
 
-        // 5. DB 저장
-        // ✅ 직렬화 실패 → AI002 (예외 전파), DB 저장 실패 → AI005 (로그만, 예외 미전파)
+        // 6. DB 저장
         saveRecommendationToDb(eventId, adminUserId, snapshotData, responseDto);
 
         return responseDto;
@@ -78,8 +99,6 @@ public class AiPolicyRecommendationService {
     private void saveRecommendationToDb(Long eventId, Long adminUserId,
                                         Map<String, Object> snapshotData,
                                         AiPolicyRecommendationDto dto) {
-
-        // 1. 직렬화 (실패 시 AI002 예외)
         String metricsJson;
         String policyJson;
         try {
@@ -87,10 +106,9 @@ public class AiPolicyRecommendationService {
             policyJson = objectMapper.writeValueAsString(dto);
         } catch (JsonProcessingException e) {
             log.error("AI 추천 직렬화 실패: eventId={}", eventId, e);
-            throw new CustomException(AiErrorCode.AI_SERIALIZATION_FAILED); // AI002
+            throw new CustomException(AiErrorCode.AI_SERIALIZATION_FAILED);
         }
 
-        // 2. DB 저장 (실패해도 AI 응답은 이미 반환 예정 → 로그만 남김)
         try {
             AiRecommendation entity = AiRecommendation.builder()
                     .eventId(eventId)
@@ -105,8 +123,7 @@ public class AiPolicyRecommendationService {
             log.info("AI recommendation saved to DB: eventId={}, adminId={}", eventId, adminUserId);
 
         } catch (DataAccessException e) {
-            // 규칙 준수: 에러코드로 의미를 명확히 하되, 전파는 하지 않음
-            CustomException customEx = new CustomException(AiErrorCode.AI_DB_SAVE_FAILED); // AI003
+            CustomException customEx = new CustomException(AiErrorCode.AI_DB_SAVE_FAILED);
             log.error("AI 추천 DB 저장 실패 [{}]: eventId={}",
                     customEx.getErrorCode().getCode(), eventId, e);
         }
