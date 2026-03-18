@@ -109,10 +109,12 @@ public class PolicyCacheRepository {
         }
 
         long start = System.currentTimeMillis();
-        boolean success = false; // ✅ 추가
+        boolean success = false;
+        Throwable error = null; // ✅ 원래 예외 저장용
+
         try {
             String json = redisTemplate.opsForValue().get(key);
-            success = true; // ✅ Redis 호출 성공 시 마킹
+            success = true;
 
             if (json == null || json.isBlank()) return Optional.empty();
 
@@ -125,10 +127,11 @@ public class PolicyCacheRepository {
             }
 
         } catch (RedisCommandTimeoutException | QueryTimeoutException e) {
-            // ✅ 타임아웃도 명시적으로 catch → Optional.empty() 반환으로 local/DB fallback 진행
+            error = e; // ✅ 저장
             log.warn("Policy cache read timeout, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         } catch (DataAccessException e) {
+            error = e; // ✅ 저장
             log.warn("Policy cache read failed, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         } finally {
@@ -136,10 +139,13 @@ public class PolicyCacheRepository {
             if (success) {
                 cb.onSuccess(elapsed, TimeUnit.MILLISECONDS);
             } else {
-                cb.onError(elapsed, TimeUnit.MILLISECONDS, new RuntimeException("Redis call failed"));
+                // ✅ 새 RuntimeException 대신 원래 예외 전달
+                cb.onError(elapsed, TimeUnit.MILLISECONDS,
+                        error != null ? error : new RuntimeException("Redis call failed"));
             }
         }
     }
+
 
 
     private Optional<PolicyCacheDto> findFromDbSingleFlight(Long eventId) {
