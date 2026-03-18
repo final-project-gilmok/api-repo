@@ -17,13 +17,20 @@ export default function EventDetailLayout() {
 
   useEffect(() => {
     if (!eventId) return
+    let cancelled = false
     setEventName('')
     getEvent(eventId)
       .then((res) => {
+        if (cancelled) return
         const ev = res?.data ?? res
         setEventName(ev?.name ?? '')
       })
-      .catch(() => setEventName(''))
+      .catch(() => {
+        if (!cancelled) setEventName('')
+      })
+    return () => {
+      cancelled = true
+    }
   }, [eventId])
 
   const currentMenuLabel = useMemo(() => {
