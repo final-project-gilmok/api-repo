@@ -62,8 +62,8 @@ jobs:
       # ✅ 신규 추가
       - name: Validate frontend build args
         env:
-          VITE_API_BASE_URL: ${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
-          VITE_AUTH_BASE_URL: ${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
+          VITE_API_BASE_URL: ${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}/api
+          VITE_AUTH_BASE_URL: ${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}/api
           VITE_GRAFANA_BASE_URL: ${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_MONITORING_HOST || secrets.OCI_MONITORING_HOST }}
           VITE_GRAFANA_DASHBOARD_UID: ${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
         run: |
@@ -79,8 +79,8 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}/frontend:latest
           build-args: |
-            VITE_API_BASE_URL=${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
-            VITE_AUTH_BASE_URL=${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
+            VITE_API_BASE_URL=${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}/api
+            VITE_AUTH_BASE_URL=${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}/api
             VITE_GRAFANA_BASE_URL=${{ env.DEPLOY_TARGET == 'aws' && secrets.AWS_MONITORING_HOST || secrets.OCI_MONITORING_HOST }}
             VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
