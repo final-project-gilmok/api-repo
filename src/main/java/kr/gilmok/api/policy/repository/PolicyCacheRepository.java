@@ -2,20 +2,19 @@ package kr.gilmok.api.policy.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.entity.Policy;
-import kr.gilmok.api.policy.repository.PolicyRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Recover;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Repository;
 
+import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 @Slf4j
 @Repository
@@ -26,51 +25,162 @@ public class PolicyCacheRepository {
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
     private final PolicyRepository policyRepository;
+
     private final long ttlSecondsPositive;
     private final long ttlSecondsNegative;
+
+    private final Semaphore dbFallbackSemaphore;
+
+    private final Cache<Long, PolicyCacheDto> localCache;
+
+    private final ConcurrentHashMap<Long, CompletableFuture<Optional<PolicyCacheDto>>> inFlight =
+            new ConcurrentHashMap<>();
 
     public PolicyCacheRepository(
             RedisTemplate<String, String> redisTemplate,
             ObjectMapper objectMapper,
             PolicyRepository policyRepository,
             @Value("${policy.cache.ttl-hours:1}") long ttlHours,
-            @Value("${policy.cache.negative-ttl-minutes:5}") long negativeTtlMinutes) {
+            @Value("${policy.cache.negative-ttl-minutes:5}") long negativeTtlMinutes,
+            @Value("${policy.local-cache.ttl-seconds:60}") long localCacheTtlSeconds,
+            @Value("${policy.local-cache.maximum-size:1000}") long localCacheMaximumSize,
+            @Value("${policy.db-fallback.max-concurrency:5}") int dbFallbackMaxConcurrency
+    ) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.policyRepository = policyRepository;
         this.ttlSecondsPositive = ttlHours * 3600L;
         this.ttlSecondsNegative = negativeTtlMinutes * 60L;
+        this.dbFallbackSemaphore = new Semaphore(dbFallbackMaxConcurrency);
+
+        this.localCache = Caffeine.newBuilder()
+                .maximumSize(localCacheMaximumSize)
+                .expireAfterWrite(Duration.ofSeconds(localCacheTtlSeconds))
+                .build();
     }
 
-    @Retryable(
-            retryFor = {DataAccessException.class},
-            maxAttempts = 2,
-            backoff = @Backoff(delay = 200)
-    )
+    /**
+     * 조회 순서
+     * 1) Redis
+     * 2) Local cache
+     * 3) Single-flight + DB fallback
+     */
     public Optional<PolicyCacheDto> find(Long eventId) {
-        String key = KEY_PREFIX + eventId;
-        String json = redisTemplate.opsForValue().get(key);
-        if (json == null || json.isBlank()) {
+        if (eventId == null) {
             return Optional.empty();
         }
+
+        // 1. Redis
+        Optional<PolicyCacheDto> redisResult = findFromRedis(eventId);
+        if (redisResult.isPresent()) {
+            localCache.put(eventId, redisResult.get());
+            return redisResult;
+        }
+
+        // 2. Local cache
+        PolicyCacheDto localHit = localCache.getIfPresent(eventId);
+        if (localHit != null) {
+            log.debug("Policy local cache hit: eventId={}", eventId);
+            return Optional.of(localHit);
+        }
+
+        // 3. DB fallback with single-flight
+        return findFromDbSingleFlight(eventId);
+    }
+
+    private Optional<PolicyCacheDto> findFromRedis(Long eventId) {
+        String key = KEY_PREFIX + eventId;
+
         try {
-            return Optional.of(objectMapper.readValue(json, PolicyCacheDto.class));
-        } catch (JsonProcessingException e) {
-            log.warn("Policy cache deserialize failed: eventId={}, key={}", eventId, key, e);
+            String json = redisTemplate.opsForValue().get(key);
+            if (json == null || json.isBlank()) {
+                return Optional.empty();
+            }
+
+            try {
+                PolicyCacheDto dto = objectMapper.readValue(json, PolicyCacheDto.class);
+                return Optional.of(dto);
+            } catch (JsonProcessingException e) {
+                log.warn("Policy cache deserialize failed: eventId={}, key={}", eventId, key, e);
+                return Optional.empty();
+            }
+        } catch (DataAccessException e) {
+            log.warn("Policy cache read failed, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         }
     }
 
-    @Recover
-    public Optional<PolicyCacheDto> recoverFind(DataAccessException e, Long eventId) {
-        log.warn("Policy cache retry exhausted, falling back to DB: eventId={}", eventId);
-        return policyRepository.findByEventId(eventId)
-                .map(PolicyCacheDto::from);
+    private Optional<PolicyCacheDto> findFromDbSingleFlight(Long eventId) {
+        CompletableFuture<Optional<PolicyCacheDto>> newFuture = new CompletableFuture<>();
+        CompletableFuture<Optional<PolicyCacheDto>> existing = inFlight.putIfAbsent(eventId, newFuture);
+
+        if (existing != null) {
+            log.debug("Join in-flight policy fetch: eventId={}", eventId);
+            try {
+                return existing.get(500, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                log.warn("In-flight join timed out: eventId={}", eventId);
+                return Optional.empty();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("In-flight join interrupted: eventId={}", eventId, e);
+                return Optional.empty();
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                log.warn("Joined in-flight fetch failed: eventId={}", eventId, cause);
+                return Optional.empty();
+            }
+        }
+
+        try {
+            Optional<PolicyCacheDto> result = fallbackToDb(eventId);
+            newFuture.complete(result);
+            return result;
+        } catch (Exception e) {
+            newFuture.completeExceptionally(e);
+            log.warn("Policy DB fallback failed: eventId={}", eventId, e);
+            return Optional.empty();
+        } finally {
+            inFlight.remove(eventId, newFuture);
+        }
     }
 
-/*정책 캐시 저장. exists=true 이면 positive TTL(기본 1시간), false 이면 negative TTL(기본 5분).*/
+    private Optional<PolicyCacheDto> fallbackToDb(Long eventId) {
+        boolean acquired = dbFallbackSemaphore.tryAcquire();
+        if (!acquired) {
+            log.warn("Policy DB fallback rejected by semaphore: eventId={}", eventId);
+            return Optional.empty();
+        }
+
+        PolicyCacheDto dto;
+        try {
+            log.warn("Policy fallback to DB: eventId={}", eventId);
+
+            Optional<Policy> policyOpt = policyRepository.findByEventId(eventId);
+
+            dto = policyOpt
+                    .map(PolicyCacheDto::from)
+                    .orElseGet(() -> PolicyCacheDto.negative(eventId));
+
+            localCache.put(eventId, dto);
+        } finally {
+            dbFallbackSemaphore.release();
+        }
+
+        save(eventId, dto);
+        return Optional.of(dto);
+    }
+
+    /**
+     * Redis 저장 + local cache 동기화
+     */
     public void save(Long eventId, PolicyCacheDto dto) {
+        if (eventId == null || dto == null) {
+            return;
+        }
+
         String key = KEY_PREFIX + eventId;
+
         try {
             String json = objectMapper.writeValueAsString(dto);
             long ttlSeconds = dto.exists() ? ttlSecondsPositive : ttlSecondsNegative;
@@ -78,16 +188,31 @@ public class PolicyCacheRepository {
         } catch (JsonProcessingException e) {
             log.warn("Policy cache serialize failed: eventId={}, key={}", eventId, key, e);
         } catch (DataAccessException e) {
-            log.warn("Policy cache save failed (Redis unavailable): eventId={}, key={}", eventId, key, e);
+            log.warn("Policy cache write failed: eventId={}, key={}", eventId, key, e);
         }
+
+        localCache.put(eventId, dto);
     }
 
-    /** 해당 eventId의 정책 캐시를 삭제한다. 이벤트 close 시 호출. */
     public void evict(Long eventId) {
-        String key = KEY_PREFIX + eventId;
-        Boolean removed = redisTemplate.delete(key);
-        if (Boolean.TRUE.equals(removed)) {
-            log.debug("Policy cache evicted: eventId={}", eventId);
+        if (eventId == null) {
+            return;
         }
+
+        String key = KEY_PREFIX + eventId;
+
+        try {
+            Boolean removed = redisTemplate.delete(key);
+            if (Boolean.TRUE.equals(removed)) {
+                log.debug("Policy cache evicted from Redis: eventId={}", eventId);
+            }
+        } catch (DataAccessException e) {
+            log.warn("Policy cache evict failed from Redis: eventId={}, key={}", eventId, key, e);
+        }
+
+        localCache.invalidate(eventId);
+        inFlight.remove(eventId);
     }
+
+
 }
