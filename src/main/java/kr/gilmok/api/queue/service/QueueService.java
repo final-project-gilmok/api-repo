@@ -1,5 +1,6 @@
 package kr.gilmok.api.queue.service;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -104,9 +105,13 @@ public class QueueService {
     // ✅ register fallback
     private QueueRegisterResponse registerFallback(Long userId, QueueRegisterRequest request,
                                                    PolicyCacheDto policy, Throwable t) {
-        log.warn("[QueueService] Circuit OPEN - register rejected: eventId={}, reason={}",
-                request.getEventId(), t.getMessage());
-        throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - register rejected: eventId={}", request.getEventId());
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        // 비즈니스 예외(CustomException, IllegalArgumentException 등)는 그대로 re-throw
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
     }
 
     // === 2. 대기열 상태 조회 — 1 Redis 호출 ===
@@ -148,9 +153,12 @@ public class QueueService {
     // ✅ getStatus fallback
     private QueueStatusResponse getStatusFallback(String eventId, String queueKey,
                                                   String username, long userId, Throwable t) {
-        log.warn("[QueueService] Circuit OPEN - getStatus rejected: eventId={}, reason={}",
-                eventId, t.getMessage());
-        throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - getStatus rejected: eventId={}", eventId);
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
     }
 
     // === 3. 통합 입장 사이클 ===
@@ -213,9 +221,12 @@ public class QueueService {
 
     // ✅ verifyQueueAccess fallback
     private void verifyQueueAccessFallback(String eventId, String queueKey, Long userId, Throwable t) {
-        log.warn("[QueueService] Circuit OPEN - verifyQueueAccess rejected: eventId={}, reason={}",
-                eventId, t.getMessage());
-        throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - verifyQueueAccess rejected: eventId={}", eventId);
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
     }
 
     // === Metrics ===

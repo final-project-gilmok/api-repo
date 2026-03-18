@@ -12,7 +12,7 @@ import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.queue.service.QueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.QueryTimeoutException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.scheduling.annotation.Scheduled;

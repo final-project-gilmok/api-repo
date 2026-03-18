@@ -6,9 +6,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.lettuce.core.RedisCommandTimeoutException;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.entity.Policy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -122,11 +124,14 @@ public class PolicyCacheRepository {
                 return Optional.empty();
             }
 
+        } catch (RedisCommandTimeoutException | QueryTimeoutException e) {
+            // ✅ 타임아웃도 명시적으로 catch → Optional.empty() 반환으로 local/DB fallback 진행
+            log.warn("Policy cache read timeout, fallback to local/DB: eventId={}, key={}", eventId, key, e);
+            return Optional.empty();
         } catch (DataAccessException e) {
             log.warn("Policy cache read failed, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         } finally {
-            // ✅ 어떤 예외가 터져도 반드시 Circuit Breaker에 결과 기록
             long elapsed = System.currentTimeMillis() - start;
             if (success) {
                 cb.onSuccess(elapsed, TimeUnit.MILLISECONDS);
@@ -213,11 +218,10 @@ public class PolicyCacheRepository {
 
         String key = KEY_PREFIX + eventId;
 
-        // ✅ 외부 직접 호출 시에도 Circuit 상태 체크
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
         if (cb.getState() == CircuitBreaker.State.OPEN || cb.getState() == CircuitBreaker.State.HALF_OPEN) {
             log.debug("[PolicyCache] Circuit {}, skip Redis save: eventId={}", cb.getState(), eventId);
-            localCache.put(eventId, dto); // 로컬 캐시만 갱신
+            localCache.put(eventId, dto);
             return;
         }
 
@@ -227,12 +231,16 @@ public class PolicyCacheRepository {
             redisTemplate.opsForValue().set(key, json, ttlSeconds, TimeUnit.SECONDS);
         } catch (JsonProcessingException e) {
             log.warn("Policy cache serialize failed: eventId={}, key={}", eventId, key, e);
+        } catch (RedisCommandTimeoutException | QueryTimeoutException e) {
+            // ✅ 타임아웃 예외 명시적 처리 — finally에서 localCache.put() 보장
+            log.warn("Policy cache write timeout: eventId={}, key={}", eventId, key, e);
         } catch (DataAccessException e) {
             log.warn("Policy cache write failed: eventId={}, key={}", eventId, key, e);
+        } finally {
+            localCache.put(eventId, dto); // ✅ 어떤 예외가 터져도 로컬 캐시는 항상 갱신
         }
-
-        localCache.put(eventId, dto);
     }
+
 
     public void evict(Long eventId) {
         if (eventId == null) {
