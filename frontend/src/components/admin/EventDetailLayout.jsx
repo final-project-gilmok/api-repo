@@ -49,11 +49,11 @@ export default function EventDetailLayout() {
           <h1 className="h4 fw-bold mb-0">{eventName || '-'}</h1>
           {currentMenuLabel && <div className="text-muted small mt-1">{currentMenuLabel}</div>}
         </div>
-          {currentMenuLabel && (
-              <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
-                  돌아가기
-                  </Link>
-              )}
+        {currentMenuLabel && (
+          <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
+            돌아가기
+          </Link>
+        )}
       </div>
       <nav className="nav nav-tabs mb-3 flex-nowrap overflow-auto">
         {eventTabs.map(({ to, label }) => (
