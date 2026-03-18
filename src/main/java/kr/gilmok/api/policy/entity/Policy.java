@@ -85,7 +85,7 @@ public class Policy {
     public void applyFromHistory(PolicyHistory history, Long rollbackByUserId, String rollbackByUsername) {
         this.admissionRps = history.getAdmissionRps();
         this.admissionConcurrency = history.getAdmissionConcurrency();
-        this.blockRules = history.getBlockRules();
+        this.blockRules = history.getBlockRules() != null ? history.getBlockRules() : BlockRules.empty();
         if (history.getGateMode() != null && !history.getGateMode().isBlank()) {
             this.gateMode = history.getGateMode();
         }

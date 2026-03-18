@@ -36,10 +36,12 @@ export default function PolicySettings() {
   const [historyTotalPages, setHistoryTotalPages] = useState(0)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [rollingBack, setRollingBack] = useState(false)
+  const [historyError, setHistoryError] = useState(null)
 
   const loadHistories = useCallback(async (page = 0) => {
     if (!eventId) return
     setHistoryLoading(true)
+    setHistoryError(null)
     try {
       const result = await getPolicyHistories(eventId, page, 10)
       const content = Array.isArray(result.content) ? result.content : []
@@ -52,8 +54,8 @@ export default function PolicySettings() {
       setHistoryTotalPages(result.totalPages ?? 0)
       setHistoryPage(page)
     } catch (e) {
-      setHistories([])
-      setHistoryTotalPages(0)
+      console.error('getPolicyHistories failed', e)
+      setHistoryError(e?.message || '변경 이력을 불러오지 못했습니다.')
     } finally {
       setHistoryLoading(false)
     }
@@ -346,6 +348,8 @@ export default function PolicySettings() {
             <p className="text-muted small mb-3">과거 정책 스냅샷으로 되돌릴 수 있습니다.</p>
             {historyLoading ? (
               <p className="text-muted small">이력 불러오는 중...</p>
+            ) : historyError ? (
+                <div className="alert alert-danger py-2 mb-0">{historyError}</div>
             ) : histories.length === 0 ? (
               <p className="text-muted small mb-0">저장된 변경 이력이 없습니다.</p>
             ) : (

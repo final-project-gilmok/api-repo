@@ -51,13 +51,14 @@ public class PolicyService {
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
-        return historyRepository.findByEventIdOrderByCreatedAtDesc(eventId, pageable)
+        return historyRepository.findByEventIdOrderByCreatedAtDescIdDesc(eventId, pageable)
                 .map(PolicyHistoryResponse::from);
     }
 
     @Transactional
     public PolicyResponse rollbackPolicy(Long eventId, Long historyId, Long rollbackByUserId, String rollbackByUsername) {
         Objects.requireNonNull(rollbackByUserId, "rollbackByUserId must not be null");
+        Objects.requireNonNull(rollbackByUsername, "rollbackByUsername must not be null");
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
