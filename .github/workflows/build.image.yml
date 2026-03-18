@@ -75,7 +75,6 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=${{ inputs.target == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
             VITE_AUTH_BASE_URL=${{ inputs.target == 'aws' && secrets.AWS_FRONTEND_URL || secrets.OCI_FRONTEND_URL }}
-            VITE_GRAFANA_URL=${{ inputs.target == 'aws' && secrets.AWS_MONITORING_HOST || secrets.OCI_MONITORING_HOST }}
             VITE_GRAFANA_BASE_URL=${{ inputs.target == 'aws' && secrets.AWS_MONITORING_HOST || secrets.OCI_MONITORING_HOST }}
             VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
