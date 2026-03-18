@@ -101,20 +101,18 @@ public class PolicyCacheRepository {
         String key = KEY_PREFIX + eventId;
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
-        // ✅ Circuit OPEN이면 Redis 호출 자체를 skip → 즉시 localCache/DB로 이동
         if (!cb.tryAcquirePermission()) {
             log.debug("[PolicyCache] Circuit OPEN, skip Redis: eventId={}", eventId);
             return Optional.empty();
         }
 
         long start = System.currentTimeMillis();
+        boolean success = false; // ✅ 추가
         try {
             String json = redisTemplate.opsForValue().get(key);
-            cb.onSuccess(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS); // ✅ 성공 카운팅
+            success = true; // ✅ Redis 호출 성공 시 마킹
 
-            if (json == null || json.isBlank()) {
-                return Optional.empty();
-            }
+            if (json == null || json.isBlank()) return Optional.empty();
 
             try {
                 PolicyCacheDto dto = objectMapper.readValue(json, PolicyCacheDto.class);
@@ -125,11 +123,19 @@ public class PolicyCacheRepository {
             }
 
         } catch (DataAccessException e) {
-            cb.onError(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS, e); // ✅ 실패 카운팅
             log.warn("Policy cache read failed, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
+        } finally {
+            // ✅ 어떤 예외가 터져도 반드시 Circuit Breaker에 결과 기록
+            long elapsed = System.currentTimeMillis() - start;
+            if (success) {
+                cb.onSuccess(elapsed, TimeUnit.MILLISECONDS);
+            } else {
+                cb.onError(elapsed, TimeUnit.MILLISECONDS, new RuntimeException("Redis call failed"));
+            }
         }
     }
+
 
     private Optional<PolicyCacheDto> findFromDbSingleFlight(Long eventId) {
         CompletableFuture<Optional<PolicyCacheDto>> newFuture = new CompletableFuture<>();
@@ -177,31 +183,43 @@ public class PolicyCacheRepository {
         PolicyCacheDto dto;
         try {
             log.info("Policy fallback to DB: eventId={}", eventId);
-
             Optional<Policy> policyOpt = policyRepository.findByEventId(eventId);
-
             dto = policyOpt
                     .map(PolicyCacheDto::from)
                     .orElseGet(() -> PolicyCacheDto.negative(eventId));
-
             localCache.put(eventId, dto);
         } finally {
             dbFallbackSemaphore.release();
         }
 
-        save(eventId, dto);
+        // ✅ Circuit OPEN 상태면 Redis write skip → 로컬 캐시만 갱신
+        CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
+        if (cb.getState() == CircuitBreaker.State.OPEN || cb.getState() == CircuitBreaker.State.HALF_OPEN) {
+            log.debug("[PolicyCache] Circuit {}, skip Redis save, local cache only: eventId={}",
+                    cb.getState(), eventId);
+        } else {
+            save(eventId, dto);
+        }
+
         return Optional.of(dto);
     }
+
 
     /**
      * Redis 저장 + local cache 동기화
      */
     public void save(Long eventId, PolicyCacheDto dto) {
-        if (eventId == null || dto == null) {
-            return;
-        }
+        if (eventId == null || dto == null) return;
 
         String key = KEY_PREFIX + eventId;
+
+        // ✅ 외부 직접 호출 시에도 Circuit 상태 체크
+        CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
+        if (cb.getState() == CircuitBreaker.State.OPEN || cb.getState() == CircuitBreaker.State.HALF_OPEN) {
+            log.debug("[PolicyCache] Circuit {}, skip Redis save: eventId={}", cb.getState(), eventId);
+            localCache.put(eventId, dto); // 로컬 캐시만 갱신
+            return;
+        }
 
         try {
             String json = objectMapper.writeValueAsString(dto);

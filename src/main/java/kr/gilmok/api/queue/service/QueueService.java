@@ -197,7 +197,7 @@ public class QueueService {
 
     // === 4. 대기열 검증 ===
 
-    @CircuitBreaker(name = "redis-queue", fallbackMethod = "verifyQueueAccessFallback") // ✅ 추가
+    @CircuitBreaker(name = "redis-queue-verify", fallbackMethod = "verifyQueueAccessFallback")
     public void verifyQueueAccess(String eventId, String queueKey, Long userId) {
         Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
         if (ownerUserId == null || !ownerUserId.equals(userId)) {

@@ -12,6 +12,7 @@ import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.queue.service.QueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.QueryTimeoutException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -77,14 +78,13 @@ public class AdmissionScheduler {
                 queueService.runAdmissionCycle(eventId, rps, maxConcurrency);
                 anySuccess = true;
 
-            } catch (RedisConnectionFailureException | RedisCommandTimeoutException e) {
-                // ✅ Redis 예외는 re-throw → Circuit Breaker가 실패로 카운팅
+            } catch (RedisConnectionFailureException | RedisCommandTimeoutException | QueryTimeoutException e) {
+                // ✅ QueryTimeoutException 추가
                 log.error("Admission Redis failure for eventId={}", eventId, e);
                 throw e;
             } catch (Exception e) {
-                // ✅ 그 외 예외는 기존처럼 삼킴 (이벤트 단위 격리 유지)
                 log.error("Admission processing failed for eventId={}", eventId, e);
-            } finally {
+            }   finally {
                 if (locked) queueRedisRepository.unlock(eventId, lockValue);
             }
         }

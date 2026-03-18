@@ -59,8 +59,6 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
-        slow-call-duration-threshold: 2s
-        slow-call-rate-threshold: 80
       redis-policy-cache:       # ✅ 새로 추가
         sliding-window-size: 10
         failure-rate-threshold: 50
@@ -71,3 +69,14 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - kr.gilmok.common.exception.CustomException
+          - java.lang.IllegalArgumentException
+      redis-queue-verify:
+        # verifyQueueAccess() 단독 사용
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - kr.gilmok.common.exception.CustomException
