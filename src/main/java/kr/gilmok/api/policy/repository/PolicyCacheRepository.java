@@ -123,7 +123,8 @@ public class PolicyCacheRepository {
                 return existing.get(joinTimeoutMs, TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 log.warn("In-flight join timed out: eventId={}", eventId);
-                return Optional.empty();
+                PolicyCacheDto localHit = localCache.getIfPresent(eventId);
+                return localHit != null ? Optional.of(localHit) : Optional.empty();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 log.warn("In-flight join interrupted: eventId={}", eventId, e);
