@@ -54,10 +54,20 @@ management:
 resilience4j:
   circuitbreaker:
     instances:
-      redis-admission:
+      redis-admission:          # 기존
         sliding-window-size: 10
-        failure-rate-threshold: 50       # 50% 실패 시 OPEN
-        wait-duration-in-open-state: 10s # 10초 후 HALF-OPEN 시도
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
         slow-call-duration-threshold: 2s
         slow-call-rate-threshold: 80
+      redis-policy-cache:       # ✅ 새로 추가
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+      redis-queue:              # ✅ 새로 추가
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2

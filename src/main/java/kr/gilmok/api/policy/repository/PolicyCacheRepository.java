@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.entity.Policy;
 import lombok.extern.slf4j.Slf4j;
@@ -21,10 +23,12 @@ import java.util.concurrent.*;
 public class PolicyCacheRepository {
 
     private static final String KEY_PREFIX = "policy:";
+    private static final String CIRCUIT_BREAKER_NAME = "redis-policy-cache"; // ✅ 추가
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
     private final PolicyRepository policyRepository;
+    private final CircuitBreakerRegistry circuitBreakerRegistry; // ✅ 추가
 
     private final long ttlSecondsPositive;
     private final long ttlSecondsNegative;
@@ -41,6 +45,7 @@ public class PolicyCacheRepository {
             RedisTemplate<String, String> redisTemplate,
             ObjectMapper objectMapper,
             PolicyRepository policyRepository,
+            CircuitBreakerRegistry circuitBreakerRegistry, // ✅ 추가
             @Value("${policy.cache.ttl-hours:1}") long ttlHours,
             @Value("${policy.cache.negative-ttl-minutes:5}") long negativeTtlMinutes,
             @Value("${policy.local-cache.ttl-seconds:60}") long localCacheTtlSeconds,
@@ -51,6 +56,7 @@ public class PolicyCacheRepository {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.policyRepository = policyRepository;
+        this.circuitBreakerRegistry = circuitBreakerRegistry; // ✅ 추가
         this.ttlSecondsPositive = ttlHours * 3600L;
         this.ttlSecondsNegative = negativeTtlMinutes * 60L;
         this.joinTimeoutMs = joinTimeoutMs;
@@ -64,7 +70,7 @@ public class PolicyCacheRepository {
 
     /**
      * 조회 순서
-     * 1) Redis
+     * 1) Redis (Circuit Breaker 보호)
      * 2) Local cache
      * 3) Single-flight + DB fallback
      */
@@ -93,9 +99,19 @@ public class PolicyCacheRepository {
 
     private Optional<PolicyCacheDto> findFromRedis(Long eventId) {
         String key = KEY_PREFIX + eventId;
+        CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
+        // ✅ Circuit OPEN이면 Redis 호출 자체를 skip → 즉시 localCache/DB로 이동
+        if (!cb.tryAcquirePermission()) {
+            log.debug("[PolicyCache] Circuit OPEN, skip Redis: eventId={}", eventId);
+            return Optional.empty();
+        }
+
+        long start = System.currentTimeMillis();
         try {
             String json = redisTemplate.opsForValue().get(key);
+            cb.onSuccess(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS); // ✅ 성공 카운팅
+
             if (json == null || json.isBlank()) {
                 return Optional.empty();
             }
@@ -107,7 +123,9 @@ public class PolicyCacheRepository {
                 log.warn("Policy cache deserialize failed: eventId={}, key={}", eventId, key, e);
                 return Optional.empty();
             }
+
         } catch (DataAccessException e) {
+            cb.onError(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS, e); // ✅ 실패 카운팅
             log.warn("Policy cache read failed, fallback to local/DB: eventId={}, key={}", eventId, key, e);
             return Optional.empty();
         }
@@ -217,6 +235,4 @@ public class PolicyCacheRepository {
         localCache.invalidate(eventId);
         inFlight.remove(eventId);
     }
-
-
 }
