@@ -1,5 +1,6 @@
 package kr.gilmok.api.queue.scheduler;
 
+import io.lettuce.core.RedisCommandTimeoutException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import kr.gilmok.api.event.entity.Event;
@@ -11,10 +12,12 @@ import kr.gilmok.api.queue.repository.QueueRedisRepository;
 import kr.gilmok.api.queue.service.QueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,7 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AdmissionScheduler {
 
     private static final long ADMISSION_LOCK_TTL_MS = 15000;
-
     private static final String ROUTING_DISABLED = "ROUTING_DISABLED";
 
     private final QueueService queueService;
@@ -41,9 +43,11 @@ public class AdmissionScheduler {
     private int defaultAdmissionRps;
 
     @Scheduled(fixedDelay = 1000)
+    @CircuitBreaker(name = "redis-admission", fallbackMethod = "processAdmissionFallback")
     public void processAdmission() {
         List<Event> openEvents = eventRepository.findByStatusOrderByStartsAtDesc(EventStatus.OPEN);
         boolean anySuccess = false;
+
         for (Event event : openEvents) {
             String eventId = String.valueOf(event.getId());
             String lockValue = UUID.randomUUID().toString();
@@ -58,7 +62,6 @@ public class AdmissionScheduler {
                     continue;
                 }
 
-                // Policy 조회 → gateMode, rps, concurrency 결정
                 int rps = defaultAdmissionRps;
                 int maxConcurrency = 0;
                 Optional<PolicyCacheDto> policyOpt = policyCacheRepository.find(event.getId());
@@ -68,25 +71,40 @@ public class AdmissionScheduler {
                         log.debug("Admission skipped (ROUTING_DISABLED): eventId={}", eventId);
                         continue;
                     }
-                    if (policy.admissionRps() > 0) {
-                        rps = policy.admissionRps();
-                    }
+                    if (policy.admissionRps() > 0) rps = policy.admissionRps();
                     maxConcurrency = policy.admissionConcurrency();
                 }
 
                 queueService.runAdmissionCycle(eventId, rps, maxConcurrency);
                 anySuccess = true;
+
+            } catch (RedisConnectionFailureException | RedisCommandTimeoutException | QueryTimeoutException e) {
+                // ✅ QueryTimeoutException 추가
+                log.error("Admission Redis failure for eventId={}", eventId, e);
+                throw e;
             } catch (Exception e) {
                 log.error("Admission processing failed for eventId={}", eventId, e);
             } finally {
                 if (locked) {
-                    queueRedisRepository.unlock(eventId, lockValue);
+                    try {
+                        queueRedisRepository.unlock(eventId, lockValue); // ✅ unlock 예외 격리
+                    } catch (Exception unlockEx) {
+                        // unlock 실패는 Circuit Breaker 실패로 전파되면 안 됨 — 경고만 기록
+                        log.warn("Failed to unlock admission lock: eventId={}", eventId, unlockEx);
+                    }
                 }
             }
         }
+
         if (anySuccess || openEvents.isEmpty()) {
             lastSuccessfulRunMs.set(System.currentTimeMillis());
         }
+    }
+
+    // ✅ Circuit OPEN 상태일 때 여기로 빠짐 (Redis 장애 중 매초 로그 폭발 방지)
+    private void processAdmissionFallback(Throwable t) {
+        log.warn("[AdmissionScheduler] Circuit OPEN - Redis unavailable, skipping admission cycle. reason={}",
+                t.getMessage());
     }
 
     public long getLastSuccessfulRunMs() {
