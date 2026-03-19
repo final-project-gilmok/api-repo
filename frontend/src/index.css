@@ -209,3 +209,22 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* 예약 확정 체크 아이콘 등장 애니메이션 */
+@keyframes checkmark-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.checkmark-success-animate {
+  animation: checkmark-pop 0.55s ease-out forwards;
+}

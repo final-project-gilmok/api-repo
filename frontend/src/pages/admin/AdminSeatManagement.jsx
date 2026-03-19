@@ -91,11 +91,10 @@ export default function AdminSeatManagement() {
 
     return (
         <>
+            <h2 className="h5 fw-semibold mb-1">좌석 관리</h2>
+            <p className="text-muted mb-4">이벤트에 좌석 구역을 추가하면 사용자 좌석 선택 페이지에 표시됩니다. 추가 후 Redis 재초기화를 누르면 잔여 수가 반영됩니다.</p>
             <div className="card border rounded-3">
                 <div className="card-body">
-                    <p className="text-muted small mb-3">
-                        이벤트에 좌석 구역을 추가하면 사용자 좌석 선택 페이지에 표시됩니다. 추가 후 Redis 재초기화를 누르면 잔여 수가 반영됩니다.
-                    </p>
                     {error && (
                         <div className="alert alert-danger py-2 mb-3">{error}</div>
                     )}

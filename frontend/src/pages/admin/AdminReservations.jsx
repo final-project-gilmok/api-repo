@@ -51,6 +51,8 @@ export default function AdminReservations() {
 
   return (
     <>
+      <h2 className="h5 fw-semibold mb-1">예약 현황</h2>
+      <p className="text-muted mb-4">예약 통계와 예약 내역을 확인합니다.</p>
       {error && (
         <div className="alert alert-danger py-2 mb-3">{error}</div>
       )}

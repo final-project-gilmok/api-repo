@@ -126,14 +126,9 @@ export default function AIRecommendation() {
 
     return (
         <div className="d-flex flex-column gap-4">
-            {/* 페이지 헤더 */}
-            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <h1 className="h3 fw-bold mb-1">AI 정책 추천</h1>
-                    <p className="text-muted small mb-0">
-                        서버 스펙과 실시간 메트릭을 조합하여 최적의 운영 정책을 제안합니다.
-                    </p>
-                </div>
+            <div className="mb-4">
+                <h2 className="h5 fw-semibold mb-1">AI 추천</h2>
+                <p className="text-muted mb-0">서버 스펙과 실시간 메트릭을 조합하여 최적의 운영 정책을 제안합니다.</p>
             </div>
 
             {/* 서버 스펙 입력 폼 */}
@@ -146,7 +141,8 @@ export default function AIRecommendation() {
                         </div>
 
                         <div className="alert alert-info py-2 small mb-3">
-                            🔍 <strong>서버 스펙을 입력하면 더 정확한 정책을 추천받을 수 있습니다.</strong>
+
+                            <strong>서버 스펙을 입력하면 더 정확한 정책을 추천받을 수 있습니다.</strong>
                             <br />
                             CPU, 메모리, 인스턴스 수를 기반으로 AI가 서버 처리 용량을 계산하여
                             RPS·동시 접속 수를 최적화된 값으로 제안합니다.
@@ -225,7 +221,7 @@ export default function AIRecommendation() {
                                 </div>
                             )}
 
-                        <div className="text-center mt-3">
+                        <div className="d-flex justify-content-end mt-3">
                             <button
                                 type="button"
                                 className="btn btn-primary btn-lg"
@@ -260,16 +256,6 @@ export default function AIRecommendation() {
                             </div>
                         </div>
                     )}
-
-                    {/* ✅ 이슈2: 다시 분석 버튼 항상 노출 */}
-                    <div className="text-end">
-                        <button
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={() => setAiData(null)}
-                        >
-                            🔄 다시 분석
-                        </button>
-                    </div>
 
                     <div className="row g-4">
                         <div className="col-lg-5">
@@ -312,16 +298,11 @@ export default function AIRecommendation() {
 
                                     <button
                                         type="button"
-                                        className="btn btn-success w-100 py-3 fw-bold mt-3"
-                                        onClick={handleApply}
-                                        disabled={applying}
+                                        className="btn btn-outline-secondary w-100 fw-bold mt-3"
+                                        style={{ padding: '12px' }}
+                                        onClick={() => setAiData(null)}
                                     >
-                                        {applying ? (
-                                            <>
-                                                <span className="spinner-border spinner-border-sm me-2" />
-                                                적용 중...
-                                            </>
-                                        ) : '추천 정책 즉시 적용'}
+                                        다시 분석
                                     </button>
                                 </div>
                             </div>
@@ -330,7 +311,7 @@ export default function AIRecommendation() {
                         <div className="col-lg-7">
                             <div className="card h-100">
                                 <div className="card-body">
-                                    <h2 className="h5 fw-semibold mb-3">추천 정책 상세</h2>
+                                    <h2 className="h5 fw-semibold mb-3">추천 정책</h2>
                                     <div className="row g-3 mb-3">
                                         <div className="col-md-6">
                                             <div className="p-3 bg-light rounded border-start border-primary border-4">
@@ -375,6 +356,22 @@ export default function AIRecommendation() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="d-flex justify-content-end mt-2">
+                        <button
+                            type="button"
+                            className="btn btn-warning btn-lg fw-bold"
+                            onClick={handleApply}
+                            disabled={applying}
+                        >
+                            {applying ? (
+                                <>
+                                    <span className="spinner-border spinner-border-sm me-2" />
+                                    적용 중...
+                                </>
+                            ) : '추천 정책 적용'}
+                        </button>
                     </div>
                 </>
             )}
