@@ -1,5 +1,7 @@
 package kr.gilmok.api.queue.service;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
@@ -14,11 +16,6 @@ import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.QueryTimeoutException;
-import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -66,9 +63,10 @@ public class QueueService {
 
     // === 1. 대기열 등록 (멱등 + admitted 차단) — 1 Redis 호출 ===
 
+    @CircuitBreaker(name = "redis-queue", fallbackMethod = "registerFallback") // ✅ 추가
     public QueueRegisterResponse register(Long userId, QueueRegisterRequest request, PolicyCacheDto policy) {
         if (userId == null) {
-           throw new IllegalArgumentException("userId must not be null");
+            throw new IllegalArgumentException("userId must not be null");
         }
         String eventId = request.getEventId();
         String userIdStr = String.valueOf(userId);
@@ -83,7 +81,6 @@ public class QueueService {
         long rank = toLong(result.get(2));
 
         if (isNew == -1) {
-            // 이미 admitted 상태 → 대기열 통과 완료이므로 기존 queueKey 반환
             log.info("Queue already admitted: eventId={}, userId={}, queueKey={}",
                     eventId, maskUserId(userIdStr), queueKey);
             return new QueueRegisterResponse(queueKey, 0, 0);
@@ -105,8 +102,21 @@ public class QueueService {
         return new QueueRegisterResponse(queueKey, position, etaSeconds);
     }
 
+    // ✅ register fallback
+    private QueueRegisterResponse registerFallback(Long userId, QueueRegisterRequest request,
+                                                   PolicyCacheDto policy, Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - register rejected: eventId={}", request.getEventId());
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        // 비즈니스 예외(CustomException, IllegalArgumentException 등)는 그대로 re-throw
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
+    }
+
     // === 2. 대기열 상태 조회 — 1 Redis 호출 ===
 
+    @CircuitBreaker(name = "redis-queue", fallbackMethod = "getStatusFallback") // ✅ 추가
     public QueueStatusResponse getStatus(String eventId, String queueKey, String username, long userId) {
         Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
         if (ownerUserId == null || !ownerUserId.equals(userId)) {
@@ -140,13 +150,20 @@ public class QueueService {
         return new QueueStatusResponse(QueueStatus.EXPIRED, 0, 0, 0, 0, null);
     }
 
-    // === 3. 통합 입장 사이클 — 반환값 기반 메트릭 (Redis 추가 호출 최소화) ===
+    // ✅ getStatus fallback
+    private QueueStatusResponse getStatusFallback(String eventId, String queueKey,
+                                                  String username, long userId, Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - getStatus rejected: eventId={}", eventId);
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
+    }
 
-    @Retryable(
-            retryFor = {QueryTimeoutException.class, RedisConnectionFailureException.class, DataAccessException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 500, multiplier = 2)
-    )
+    // === 3. 통합 입장 사이클 ===
+
+    // ✅ @Retryable 제거 — Circuit Breaker가 빠른 실패 담당하므로 중복 불필요
     public void runAdmissionCycle(String eventId, int rps, int maxConcurrency) {
         long admittedTtlMs = admittedTtlSeconds * 1000L;
         long graceMs = gracePeriodSeconds * 1000L;
@@ -166,7 +183,6 @@ public class QueueService {
             long epochSecond = System.currentTimeMillis() / 1000;
             queueRedisRepository.recordAdmissionRate(eventId, admittedCount, epochSecond);
 
-            // Extract admitted member queueKeys from index 7+
             List<String> admittedMembers = new ArrayList<>();
             for (int i = 7; i < result.size(); i++) {
                 admittedMembers.add(String.valueOf(result.get(i)));
@@ -185,6 +201,32 @@ public class QueueService {
         }
 
         updateMetricsFromValues(eventId, waitingSize, admittedSize);
+    }
+
+    // === 4. 대기열 검증 ===
+
+    @CircuitBreaker(name = "redis-queue-verify", fallbackMethod = "verifyQueueAccessFallback")
+    public void verifyQueueAccess(String eventId, String queueKey, Long userId) {
+        Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
+        if (ownerUserId == null || !ownerUserId.equals(userId)) {
+            log.warn("Queue ownership mismatch or expired: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
+            throw new CustomException(QueueErrorCode.INVALID_QUEUE_KEY);
+        }
+
+        if (!queueRedisRepository.isAdmitted(eventId, queueKey)) {
+            log.warn("Queue not admitted: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
+            throw new CustomException(QueueErrorCode.NOT_ADMITTED);
+        }
+    }
+
+    // ✅ verifyQueueAccess fallback
+    private void verifyQueueAccessFallback(String eventId, String queueKey, Long userId, Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            log.warn("[QueueService] Circuit OPEN - verifyQueueAccess rejected: eventId={}", eventId);
+            throw new CustomException(QueueErrorCode.QUEUE_SERVICE_UNAVAILABLE);
+        }
+        if (t instanceof RuntimeException) throw (RuntimeException) t;
+        throw new RuntimeException(t);
     }
 
     // === Metrics ===
@@ -234,13 +276,9 @@ public class QueueService {
     }
 
     private long calculatePollInterval(long position) {
-        if (position >= 1000) {
-            return 5000;
-        } else if (position >= 100) {
-            return 3000;
-        } else {
-            return 1000;
-        }
+        if (position >= 1000) return 5000;
+        else if (position >= 100) return 3000;
+        else return 1000;
     }
 
     private long toLong(Object obj) {
@@ -260,33 +298,27 @@ public class QueueService {
         }
     }
 
-    // [신규 추가] 특정 이벤트의 현재 대기열 상태(사이즈) 정보 조회
+    // === AI용 메트릭 조회 ===
+
     public Map<String, Long> getQueueMetricsForAi(String eventId) {
-        Long waitingSize = queueRedisRepository.getQueueSize(eventId);
-        Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
-
-        Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000); // 최근 1분
-
         Map<String, Long> metrics = new HashMap<>();
-        metrics.put("waitingQueueSize", waitingSize != null ? waitingSize : 0L);
-        metrics.put("admittedQueueSize", admittedSize != null ? admittedSize : 0L);
-        metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
+        metrics.put("waitingQueueSize", 0L);
+        metrics.put("admittedQueueSize", 0L);
+        metrics.put("currentRps", 0L);
+
+        try {
+            Long waitingSize = queueRedisRepository.getQueueSize(eventId);
+            Long admittedSize = queueRedisRepository.getAdmittedCount(eventId);
+            Double currentRps = queueRedisRepository.getMovingAverageRps(eventId, 60_000);
+
+            metrics.put("waitingQueueSize", waitingSize != null ? waitingSize : 0L);
+            metrics.put("admittedQueueSize", admittedSize != null ? admittedSize : 0L);
+            metrics.put("currentRps", currentRps != null ? Math.round(currentRps) : 0L);
+        } catch (Exception e) {
+            // ✅ Redis 장애 시 0값 기본 메트릭 반환 — AI 서비스 호출 끊기지 않음
+            log.warn("[QueueService] getQueueMetricsForAi failed, returning defaults: eventId={}", eventId, e);
+        }
 
         return metrics;
-    }
-
-    // 대기열 통과 여부 및 소유권 검증 (토큰 발급 전 단계)
-    public void verifyQueueAccess(String eventId, String queueKey, Long userId) {
-        Long ownerUserId = queueRedisRepository.getQueueOwnerUserId(eventId, queueKey);
-        if (ownerUserId == null || !ownerUserId.equals(userId)) {
-            log.warn("Queue ownership mismatch or expired: eventId={}, queueKey={}, userId={}", eventId, queueKey,
-                    userId);
-            throw new CustomException(QueueErrorCode.INVALID_QUEUE_KEY);
-        }
-
-        if (!queueRedisRepository.isAdmitted(eventId, queueKey)) {
-            log.warn("Queue not admitted: eventId={}, queueKey={}, userId={}", eventId, queueKey, userId);
-            throw new CustomException(QueueErrorCode.NOT_ADMITTED);
-        }
     }
 }
