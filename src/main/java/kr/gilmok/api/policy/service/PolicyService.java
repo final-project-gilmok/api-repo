@@ -6,6 +6,7 @@ import kr.gilmok.api.policy.constants.PolicyDefaults;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
 import kr.gilmok.api.policy.dto.PolicyCreateRequest;
 import kr.gilmok.api.policy.dto.PolicyResponse;
+import kr.gilmok.api.policy.dto.PolicyHistoryResponse;
 import kr.gilmok.api.policy.dto.PolicyUpdateRequest;
 import kr.gilmok.api.policy.entity.Policy;
 import kr.gilmok.api.policy.entity.PolicyHistory;
@@ -15,6 +16,8 @@ import kr.gilmok.api.policy.repository.PolicyHistoryRepository;
 import kr.gilmok.api.policy.repository.PolicyRepository;
 import kr.gilmok.api.policy.validation.BlockRulesValidator;
 import kr.gilmok.common.exception.CustomException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +47,44 @@ public class PolicyService {
         this.eventRepository = eventRepository;
     }
 
+    public Page<PolicyHistoryResponse> getPolicyHistories(Long eventId, Pageable pageable) {
+        if (!eventRepository.existsById(eventId)) {
+            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+        }
+        return historyRepository.findByEventIdOrderByCreatedAtDescIdDesc(eventId, pageable)
+                .map(PolicyHistoryResponse::from);
+    }
+
+    @Transactional
+    public PolicyResponse rollbackPolicy(Long eventId, Long historyId, Long rollbackByUserId, String rollbackByUsername) {
+        Objects.requireNonNull(rollbackByUserId, "rollbackByUserId must not be null");
+        Objects.requireNonNull(rollbackByUsername, "rollbackByUsername must not be null");
+        if (!eventRepository.existsById(eventId)) {
+            throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
+        }
+        PolicyHistory history = historyRepository.findByIdAndEventId(historyId, eventId)
+                .orElseThrow(() -> new CustomException(PolicyErrorCode.POLICY_HISTORY_NOT_FOUND));
+        Policy policy = policyRepository.findByEventId(eventId)
+                .orElseThrow(() -> new CustomException(PolicyErrorCode.POLICY_NOT_FOUND));
+        // 롤백 전 현재 상태를 히스토리에 저장
+        historyRepository.save(PolicyHistory.from(policy));
+        // 히스토리 적용
+        policy.applyFromHistory(history, rollbackByUserId, rollbackByUsername);
+        try {
+            policyRepository.saveAndFlush(policy);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Policy rollback conflict: eventId={}", eventId, e);
+            throw new CustomException(PolicyErrorCode.POLICY_CONFLICT);
+        }
+        // 캐시 갱신
+        try {
+            policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
+        } catch (Exception e) {
+            log.warn("Redis policy cache save failed after rollback: eventId={}", eventId, e);
+        }
+        return PolicyResponse.from(policy);
+    }
+
     @Transactional
     public void createPolicyForEvent(Long eventId, PolicyCreateRequest request) {
         if (request != null && request.blockRules() != null) {
@@ -56,7 +97,7 @@ public class PolicyService {
         String gateMode = effectiveGateMode(request);
         Integer maxRps = request != null ? request.maxRequestsPerSecond() : null;
         Integer blockMin = request != null ? request.blockDurationMinutes() : null;
-        policy.updatePolicy(rps, concurrency, blockRules, gateMode, null, maxRps, blockMin);
+        policy.updatePolicy(rps, concurrency, blockRules, gateMode, null, null, maxRps, blockMin);
         policyRepository.saveAndFlush(policy);
         try {
             policyCacheRepository.save(eventId, PolicyCacheDto.from(policy));
@@ -66,8 +107,9 @@ public class PolicyService {
     }
 
     @Transactional
-    public PolicyResponse updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId) {
+    public PolicyResponse updatePolicy(Long eventId, PolicyUpdateRequest request, Long updatedByUserId, String updatedByUsername) {
         Objects.requireNonNull(updatedByUserId, "updatedByUserId must not be null");
+        Objects.requireNonNull(updatedByUsername, "updatedByUsername must not be null");
         if (!eventRepository.existsById(eventId)) {
             throw new CustomException(EventErrorCode.EVENT_NOT_FOUND);
         }
@@ -87,6 +129,7 @@ public class PolicyService {
                 request.blockRules(),
                 request.gateMode(),
                 updatedByUserId,
+                updatedByUsername,
                 request.maxRequestsPerSecond(),
                 request.blockDurationMinutes()
         );

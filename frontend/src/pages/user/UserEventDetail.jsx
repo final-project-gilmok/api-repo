@@ -100,15 +100,14 @@ export default function UserEventDetail() {
       <div className="card border">
         <div className="card-body">
           <p className="text-muted mb-4">
-            이 공연에 참여하려면 대기열에 입장해야 합니다.
-            대기열을 통과하면 좌석을 선택하고 예약을 진행할 수 있습니다.
+              예약하기를 누르면 순서에 따라 입장 후 좌석 선택이 가능합니다.
           </p>
           <button
             className="btn btn-primary btn-lg"
             onClick={handleEnterQueue}
             disabled={!eventId || event.status !== 'OPEN'}
           >
-            예약 입장
+            예약하기
           </button>
           {event.status !== 'OPEN' && (
             <p className="text-muted small mt-2 mb-0">예매 가능 상태(OPEN)일 때만 입장할 수 있습니다.</p>

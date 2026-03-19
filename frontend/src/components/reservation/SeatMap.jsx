@@ -1,6 +1,6 @@
 const sectionColors = {
   VIP: { bg: '#fff3cd', border: '#ffc107', text: '#664d03' },
-  R: { bg: '#cfe2ff', border: '#0d6efd', text: '#084298' },
+  R: { bg: '#d2e5e8', border: '#377381', text: '#244f59' },
   S: { bg: '#d1e7dd', border: '#198754', text: '#0f5132' },
   A: { bg: '#e2e3e5', border: '#6c757d', text: '#41464b' },
 }

@@ -91,18 +91,10 @@ export default function AdminSeatManagement() {
 
     return (
         <>
-            <div className="d-flex align-items-center justify-content-between mb-3">
-                <h1 className="h4 fw-bold mb-0">좌석 관리 - 이벤트 #{eventId}</h1>
-                <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
-                    돌아가기
-                </Link>
-            </div>
-
+            <h2 className="h5 fw-semibold mb-1">좌석 관리</h2>
+            <p className="text-muted mb-4">이벤트에 좌석 구역을 추가하면 사용자 좌석 선택 페이지에 표시됩니다. 추가 후 Redis 재초기화를 누르면 잔여 수가 반영됩니다.</p>
             <div className="card border rounded-3">
                 <div className="card-body">
-                    <p className="text-muted small mb-3">
-                        이벤트에 좌석 구역을 추가하면 사용자 좌석 선택 페이지에 표시됩니다. 추가 후 Redis 재초기화를 누르면 잔여 수가 반영됩니다.
-                    </p>
                     {error && (
                         <div className="alert alert-danger py-2 mb-3">{error}</div>
                     )}
