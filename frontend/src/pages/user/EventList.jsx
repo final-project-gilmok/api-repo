@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 
+const statusLabel = { OPEN: '예매 가능', DRAFT: '준비 중', CLOSED: '종료' }
+
 function formatPeriod(startsAt, endsAt) {
   if (!startsAt && !endsAt) return null
   const start = startsAt ? new Date(startsAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g,'.').replace(/\.$/, '') : '?'
@@ -34,16 +36,16 @@ export default function EventList() {
       <p className="text-muted mb-4">참여하고 싶은 공연을 선택하세요.</p>
 
       {events.length === 0 ? (
-        <div className="text-center text-muted py-5">현재 열린 이벤트가 없습니다.</div>
+        <div className="text-center text-muted py-5">현재 열린 공연이 없습니다.</div>
       ) : (
         <div className="row g-3">
           {events.map((evt) => (
             <div key={evt.eventId} className="col-md-6 col-lg-4">
               <div className="card h-100 border">
                 <div className="card-body d-flex flex-column">
-                  <h5 className="card-title fw-semibold">{evt.name ?? evt.eventName ?? `이벤트 #${evt.eventId}`}</h5>
+                  <h5 className="card-title fw-semibold">{evt.name ?? evt.eventName ?? `공연 #${evt.eventId}`}</h5>
                   <span className={`badge badge-status ${evt.status?.toLowerCase()} mb-2 align-self-start`}>
-                    {evt.status}
+                    {statusLabel[evt.status] ?? evt.status}
                   </span>
                   {(evt.startsAt || evt.endsAt) && (
                     <p className="text-muted small mb-2">
