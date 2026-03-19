@@ -23,5 +23,10 @@ public record AiPolicyRecommendationDto(
 
         @JsonPropertyDescription("추천하는 차단 규칙")
         @JsonProperty(required = true)
-        BlockRules suggestedBlockRules
+        BlockRules suggestedBlockRules,
+
+        // ✅ 서버 스펙 추천 추가
+        @JsonPropertyDescription("추천 서버 스펙. 스펙 정보가 없으면 null로 반환")
+        @JsonProperty(required = false)
+        RecommendedServerSpec recommendedServerSpec
 ) {}
