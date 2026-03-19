@@ -15,6 +15,8 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.exception.AdmissionTokenErrorCode;
+import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +55,8 @@ class ReservationServiceTest {
     private MeterRegistry meterRegistry;
     @Mock
     private JwtProvider jwtProvider;
+    @Mock
+    private AdmissionTokenBlocklistRepository admissionTokenBlocklistRepository;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -223,6 +227,9 @@ class ReservationServiceTest {
             when(claims.get("id", Long.class)).thenReturn(1L);
             when(jwtProvider.validateToken(anyString())).thenReturn(true);
             when(jwtProvider.getClaims(anyString())).thenReturn(claims);
+            when(jwtProvider.getJti(anyString())).thenReturn("test-jti-uuid");
+            when(jwtProvider.getRemainingTtlSeconds(anyString())).thenReturn(240L);
+            when(admissionTokenBlocklistRepository.markAsUsed("test-jti-uuid", 240L)).thenReturn(true);
 
             Counter counter = mock(Counter.class);
             when(meterRegistry.counter(eq("reservation.success.total"), eq("eventId"), eq("1")))
@@ -235,6 +242,44 @@ class ReservationServiceTest {
             // then
             assertThat(response.status()).isEqualTo(ReservationStatus.CONFIRMED);
             verify(seatRepository).findByIdForUpdate(10L);
+            // Admission Token One-Time 무효화 검증
+            verify(jwtProvider).getJti("valid-token");
+            verify(admissionTokenBlocklistRepository).markAsUsed("test-jti-uuid", 240L);
+        }
+
+        @Test
+        @DisplayName("이미 사용된 토큰(중복 확정 시도)이면 ALREADY_USED_ADMISSION_TOKEN 예외가 발생한다")
+        void confirm_alreadyUsedToken_throwsException() {
+            // given
+            Event event = createEvent(1L);
+            Seat seat = createSeat(10L, event);
+            Reservation reservation = createReservation(1L, event, seat, 1L);
+
+            when(reservationRepository.findByReservationCodeForUpdate(reservation.getReservationCode()))
+                    .thenReturn(Optional.of(reservation));
+            when(seatRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(seat));
+
+            Claims claims = mock(Claims.class);
+            when(claims.get("evt", String.class)).thenReturn("1");
+            when(claims.get("res", String.class)).thenReturn(reservation.getReservationCode());
+            when(claims.get("id", Long.class)).thenReturn(1L);
+            when(jwtProvider.validateToken(anyString())).thenReturn(true);
+            when(jwtProvider.getClaims(anyString())).thenReturn(claims);
+            when(jwtProvider.getJti(anyString())).thenReturn("used-jti-uuid");
+            when(jwtProvider.getRemainingTtlSeconds(anyString())).thenReturn(240L);
+
+            Counter counter = mock(Counter.class);
+            when(meterRegistry.counter(eq("reservation.success.total"), eq("eventId"), eq("1")))
+                    .thenReturn(counter);
+
+            // markAsUsed가 false를 반환 (이미 누군가 선점 사용함)
+            when(admissionTokenBlocklistRepository.markAsUsed("used-jti-uuid", 240L)).thenReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> reservationService.confirmReservation(1L, reservation.getReservationCode(), "valid-token"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                            .isEqualTo(AdmissionTokenErrorCode.ALREADY_USED_ADMISSION_TOKEN));
         }
 
         @Test

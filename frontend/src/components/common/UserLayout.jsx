@@ -1,5 +1,6 @@
 import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { authService } from '../../api/auth'
 
 export default function UserLayout() {
     const navigate = useNavigate()
@@ -23,19 +24,25 @@ export default function UserLayout() {
         })
     }, [location.pathname])
 
-    const handleLogout = () => {
-        // 모든 인증 관련 정보 삭제
+    const clearLocalAuth = () => {
         localStorage.removeItem('isLoggedIn')
         localStorage.removeItem('username')
         localStorage.removeItem('role')
-        localStorage.removeItem('userId')
 
-        setAuth({
-            isLoggedIn: false,
-            username: '',
-            role: '',
-        })
-        navigate('/')
+        setAuth({ isLoggedIn: false, username: '', role: '' })
+    }
+
+    const handleLogout = async () => {
+        try {
+            // 서버에 로그아웃 요청: access token blocklist 등록 + refresh 세션 revoke
+            await authService.logout()
+        } catch (e) {
+            // 네트워크 오류 등으로 서버 호출 실패해도 클라이언트 상태는 반드시 정리
+            console.warn('로그아웃 서버 요청 실패 (클라이언트 상태는 정리됨):', e.message)
+        } finally {
+            clearLocalAuth()
+            navigate('/')
+        }
     }
 
     return (

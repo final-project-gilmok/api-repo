@@ -37,16 +37,6 @@ function addRefreshSubscriber(resolve, reject) {
 }
 
 /**
- * 쿠키 이름으로 값을 읽어오는 유틸리티
- */
-function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return null;
-}
-
-/**
  * 공통 fetch 래퍼 함수
  * - CSRF 토큰 자동 주입
  * - 401 에러 시 토큰 자동 재발급(Reissue) 및 요청 재시도 로직 포함
@@ -58,7 +48,6 @@ async function request(baseUrl, path, options = {}) {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': getCookie('XSRF-TOKEN'), // CSRF 방어용 헤더 추가
             ...options.headers,
         },
         credentials: 'include', // 쿠키 기반 인증을 위해 설정
@@ -73,6 +62,20 @@ async function request(baseUrl, path, options = {}) {
         if (options.skipAuthRedirect) {
             const err = new Error('인증이 필요합니다.');
             err.status = 401;
+            throw err;
+        }
+
+        // AT004: 로그아웃된 토큰으로 접근한 경우 — 재발급 시도 없이 바로 로그아웃 처리
+        // (이미 서버에서 blocklist에 등록된 토큰이므로 재발급해도 access token은 여전히 차단됨)
+        const errorBody = await res.clone().json().catch(() => ({}));
+        if (errorBody.code === 'AT004') {
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
+            window.location.href = '/auth/login';
+            const err = new Error('로그아웃된 토큰입니다. 다시 로그인해주세요.');
+            err.status = 401;
+            err.code = 'AT004';
             throw err;
         }
 
@@ -109,7 +112,7 @@ async function request(baseUrl, path, options = {}) {
                 }
             } catch (err) {
                 isRefreshing = false;
-                onRefreshFailed(err); // 💡 대기 중인 요청들도 모두 에러 처리 (Pending 방지)
+                onRefreshFailed(err); // 대기 중인 요청들도 모두 에러 처리 (Pending 방지)
 
                 // 인증 정보 만료 시 로컬 스토리지 정리 및 로그인 페이지 이동
                 // (HttpOnly 쿠키는 서버가 만료 처리)

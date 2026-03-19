@@ -15,6 +15,8 @@ import kr.gilmok.api.reservation.exception.ReservationErrorCode;
 import kr.gilmok.api.reservation.repository.ReservationRepository;
 import kr.gilmok.api.reservation.repository.SeatLockRedisRepository;
 import kr.gilmok.api.reservation.repository.SeatRepository;
+import kr.gilmok.api.token.exception.AdmissionTokenErrorCode;
+import kr.gilmok.api.token.repository.AdmissionTokenBlocklistRepository;
 import kr.gilmok.api.token.service.JwtProvider;
 import kr.gilmok.common.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class ReservationService {
     private final QueueRedisRepository queueRedisRepository;
     private final MeterRegistry meterRegistry;
     private final JwtProvider jwtProvider;
+    private final AdmissionTokenBlocklistRepository admissionTokenBlocklistRepository;
 
     @Value("${reservation.seat-lock-ttl-seconds:300}")
     private int seatLockTtlSeconds;
@@ -109,7 +112,7 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse confirmReservation(Long userId, String reservationCode, String admissionToken) {
-        // [수정] 입장용 토큰 검증 - Interceptor에서 1차 검증되었지만, Service에서도 JwtProvider로 정합성 체크
+        // 입장용 토큰 검증 - Interceptor에서 1차 검증되었지만, Service에서도 JwtProvider로 정합성 체크
         if (admissionToken == null || !jwtProvider.validateToken(admissionToken)) {
             throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
         }
@@ -175,6 +178,19 @@ public class ReservationService {
 
         meterRegistry.counter("reservation.success.total", "eventId", String.valueOf(reservation.getEvent().getId()))
                 .increment();
+
+        // Admission Token One-Time 무효화: 예약 확정 성공 후 해당 토큰을 blocklist에 등록하여 재사용 방지
+        String jti = jwtProvider.getJti(admissionToken);
+        long remainingTtlSeconds = jwtProvider.getRemainingTtlSeconds(admissionToken);
+        if (jti == null || remainingTtlSeconds <= 0) {
+            throw new CustomException(ReservationErrorCode.NOT_ADMITTED);
+        }
+        if (!admissionTokenBlocklistRepository.markAsUsed(jti, remainingTtlSeconds)) {
+            log.warn("[ReservationService] Admission token already used - jti: {}", jti);
+            throw new CustomException(AdmissionTokenErrorCode.ALREADY_USED_ADMISSION_TOKEN);
+        }
+        log.info("[ReservationService] Admission token invalidated after confirm - jti: {}, remainingTtl: {}s",
+                jti, remainingTtlSeconds);
 
         return ReservationResponse.from(reservation, seatLockTtlSeconds);
     }
