@@ -12,11 +12,12 @@ const DEFAULT_SPEC = {
     replicaCount: '',
 }
 
-const SPEC_STORAGE_KEY = 'ai_recommendation_server_spec'
+// ✅ 이슈1: eventId별로 키 분리
+const getSpecStorageKey = (eventId) => `ai_recommendation_server_spec_${eventId}`
 
-const loadSavedSpec = () => {
+const loadSavedSpec = (eventId) => {
     try {
-        const saved = localStorage.getItem(SPEC_STORAGE_KEY)
+        const saved = localStorage.getItem(getSpecStorageKey(eventId))
         return saved ? JSON.parse(saved) : DEFAULT_SPEC
     } catch {
         return DEFAULT_SPEC
@@ -33,14 +34,14 @@ export default function AIRecommendation() {
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
     const [aiData, setAiData] = useState(null)
-    const [serverSpec, setServerSpec] = useState(loadSavedSpec)
+    const [serverSpec, setServerSpec] = useState(() => loadSavedSpec(eventId)) // ✅ 이슈1
     const [specError, setSpecError] = useState('')
 
     const handleSpecChange = (e) => {
         const { name, value } = e.target
         setServerSpec(prev => {
             const updated = { ...prev, [name]: value }
-            localStorage.setItem(SPEC_STORAGE_KEY, JSON.stringify(updated))
+            localStorage.setItem(getSpecStorageKey(eventId), JSON.stringify(updated)) // ✅ 이슈1
             return updated
         })
     }
@@ -156,7 +157,6 @@ export default function AIRecommendation() {
                         </div>
 
                         <div className="row g-3 mb-3">
-                            {/* 인스턴스 타입 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">인스턴스 타입</label>
                                 <input
@@ -167,12 +167,8 @@ export default function AIRecommendation() {
                                     value={serverSpec.instanceType}
                                     onChange={handleSpecChange}
                                 />
-                                <div className="form-text">
-                                    AWS/OCI 인스턴스 타입 또는 서버 사양 이름
-                                </div>
+                                <div className="form-text">AWS/OCI 인스턴스 타입 또는 서버 사양 이름</div>
                             </div>
-
-                            {/* CPU 코어 수 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">CPU 코어 수</label>
                                 <input
@@ -184,12 +180,8 @@ export default function AIRecommendation() {
                                     value={serverSpec.cpuCores}
                                     onChange={handleSpecChange}
                                 />
-                                <div className="form-text">
-                                    서버 1대 기준 할당된 CPU 코어 수
-                                </div>
+                                <div className="form-text">서버 1대 기준 할당된 CPU 코어 수</div>
                             </div>
-
-                            {/* 메모리 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">메모리 (GB)</label>
                                 <input
@@ -201,12 +193,8 @@ export default function AIRecommendation() {
                                     value={serverSpec.memoryGb}
                                     onChange={handleSpecChange}
                                 />
-                                <div className="form-text">
-                                    서버 1대 기준 할당된 메모리 용량
-                                </div>
+                                <div className="form-text">서버 1대 기준 할당된 메모리 용량</div>
                             </div>
-
-                            {/* 인스턴스 수 (레플리카 수) */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">인스턴스 수 (레플리카 수)</label>
                                 <input
@@ -218,9 +206,7 @@ export default function AIRecommendation() {
                                     value={serverSpec.replicaCount}
                                     onChange={handleSpecChange}
                                 />
-                                <div className="form-text">
-                                    현재 실행 중인 서버(컨테이너) 대수
-                                </div>
+                                <div className="form-text">현재 실행 중인 서버(컨테이너) 대수</div>
                             </div>
                         </div>
 
@@ -261,7 +247,7 @@ export default function AIRecommendation() {
             {/* 분석 결과 화면 */}
             {aiData && (
                 <>
-                    {/* 입력 스펙 요약 */}
+                    {/* 입력 스펙 요약 - 스펙 있을 때만 */}
                     {hasAnySpec(serverSpec) && (
                         <div className="card border-secondary">
                             <div className="card-body py-2">
@@ -270,16 +256,20 @@ export default function AIRecommendation() {
                                     CPU <strong>{serverSpec.cpuCores}코어</strong> |
                                     메모리 <strong>{serverSpec.memoryGb}GB</strong> |
                                     인스턴스 <strong>{serverSpec.replicaCount}대</strong>
-                                    <button
-                                        className="btn btn-link btn-sm py-0 ms-2"
-                                        onClick={() => setAiData(null)}
-                                    >
-                                        다시 분석
-                                    </button>
                                 </p>
                             </div>
                         </div>
                     )}
+
+                    {/* ✅ 이슈2: 다시 분석 버튼 항상 노출 */}
+                    <div className="text-end">
+                        <button
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => setAiData(null)}
+                        >
+                            🔄 다시 분석
+                        </button>
+                    </div>
 
                     <div className="row g-4">
                         <div className="col-lg-5">

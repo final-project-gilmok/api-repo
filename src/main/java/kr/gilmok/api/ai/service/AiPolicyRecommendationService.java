@@ -32,6 +32,11 @@ public class AiPolicyRecommendationService {
 
     public AiPolicyRecommendationDto getRecommendation(Long eventId, Long adminUserId,
                                                        ServerSpecRequest serverSpec) {
+        // ✅ 서비스 진입 시점에 검증
+        if (serverSpec != null) {
+            serverSpec.validate();
+        }
+
         // 1. 데이터 수집
         Map<String, Long> queueMetrics = queueService.getQueueMetricsForAi(String.valueOf(eventId));
         String errorRateInfo = prometheusMetricsService.getCurrentErrorRate();
@@ -46,29 +51,19 @@ public class AiPolicyRecommendationService {
         long waitingSize = queueMetrics.getOrDefault("waitingQueueSize", 0L);
         long currentRps = queueMetrics.getOrDefault("currentRps", 0L);
 
-        // 3. 서버 스펙 섹션 조건부 생성 (총 처리 용량 계산 포함)
+        // 3. 서버 스펙 섹션 조건부 생성 (✅ 총 처리 용량 계산 포함)
         String serverSpecSection = "";
         if (serverSpec != null && serverSpec.hasAnySpec()) {
-            int totalCpu = (serverSpec.cpuCores() != null && serverSpec.replicaCount() != null)
-                    ? serverSpec.cpuCores() * serverSpec.replicaCount() : 0;
-            int totalMemory = (serverSpec.memoryGb() != null && serverSpec.replicaCount() != null)
-                    ? serverSpec.memoryGb() * serverSpec.replicaCount() : 0;
+            int totalCpu = serverSpec.cpuCores() * serverSpec.replicaCount();
+            int totalMemory = serverSpec.memoryGb() * serverSpec.replicaCount();
 
-            StringBuilder sb = new StringBuilder("[서버 스펙]\n");
-            if (serverSpec.instanceType() != null)
-                sb.append("- 인스턴스 타입: ").append(serverSpec.instanceType()).append("\n");
-            if (serverSpec.cpuCores() != null)
-                sb.append("- CPU 코어: ").append(serverSpec.cpuCores()).append("코어 (인스턴스당)\n");
-            if (serverSpec.memoryGb() != null)
-                sb.append("- 메모리: ").append(serverSpec.memoryGb()).append("GB (인스턴스당)\n");
-            if (serverSpec.replicaCount() != null)
-                sb.append("- 실행 중인 인스턴스 수: ").append(serverSpec.replicaCount()).append("대\n");
-            if (totalCpu > 0)
-                sb.append("- 총 처리 가능 CPU: ").append(totalCpu).append("코어\n");
-            if (totalMemory > 0)
-                sb.append("- 총 처리 가능 메모리: ").append(totalMemory).append("GB\n");
-
-            serverSpecSection = sb.toString() + "\n";
+            serverSpecSection = "[서버 스펙]\n" +
+                    "- 인스턴스 타입: " + serverSpec.instanceType() + "\n" +
+                    "- CPU 코어: " + serverSpec.cpuCores() + "코어 (인스턴스당)\n" +
+                    "- 메모리: " + serverSpec.memoryGb() + "GB (인스턴스당)\n" +
+                    "- 실행 중인 인스턴스 수: " + serverSpec.replicaCount() + "대\n" +
+                    "- 총 처리 가능 CPU: " + totalCpu + "코어\n" +
+                    "- 총 처리 가능 메모리: " + totalMemory + "GB\n\n";
         }
 
         // 4. 프롬프트 구성
@@ -102,9 +97,7 @@ public class AiPolicyRecommendationService {
         return responseDto;
     }
 
-    /**
-     * 서버 스펙 입력 여부에 따라 시스템 프롬프트를 분기합니다.
-     */
+    // ✅ 이슈4: 스펙 유무에 따라 프롬프트와 응답 예시 완전 분기
     private String buildSystemPrompt(boolean hasServerSpec) {
         String specInstruction = hasServerSpec
                 ? """
@@ -123,41 +116,51 @@ public class AiPolicyRecommendationService {
                 : """
                   [서버 스펙 미제공]
                   - 서버 스펙 정보가 없으므로 실시간 메트릭만으로 정책을 분석해.
-                  - recommendedServerSpec은 null로 반환해.
                   - admissionRps와 admissionConcurrency는 메트릭 기반으로 보수적으로 추천해.
+                  - recommendedServerSpec은 반드시 null로 반환해. 절대 객체를 채워 반환하지 마.
+                  """;
+
+        String responseExample = hasServerSpec
+                ? """
+                  {
+                    "actionType": "SCALE_UP",
+                    "rationale": "현재 큐 대기열이 500명이고 에러율이 15%로 높아 스케일 업이 필요합니다.",
+                    "recommendedAdmissionRps": 200,
+                    "recommendedAdmissionConcurrency": 100,
+                    "suggestedBlockRules": { "ipRanges": [], "userAgentPatterns": null },
+                    "recommendedServerSpec": {
+                      "cpuCores": 8,
+                      "memoryGb": 32,
+                      "replicaCount": 4,
+                      "scaleAction": "SCALE_UP",
+                      "reason": "현재 4코어 2대로는 트래픽 처리가 부족하므로 8코어 4대로 증설을 권장합니다."
+                    }
+                  }
+                  """
+                : """
+                  {
+                    "actionType": "MAINTAIN",
+                    "rationale": "현재 메트릭 기준으로 큐 대기열과 에러율이 안정적입니다.",
+                    "recommendedAdmissionRps": 150,
+                    "recommendedAdmissionConcurrency": 80,
+                    "suggestedBlockRules": { "ipRanges": [], "userAgentPatterns": null },
+                    "recommendedServerSpec": null
+                  }
                   """;
 
         return """
                 너는 트래픽 제어 시스템의 수석 SRE 엔지니어 봇이야.
                 주어진 서버 메트릭과 스펙을 분석해서 최적의 운영 정책을 JSON으로 반환해.
-                
+
                 [역할]
                 - 실시간 트래픽 메트릭을 분석해 과부하 여부를 판단한다.
                 - 서버가 안정적으로 처리할 수 있는 RPS와 동시 접속 수를 추천한다.
                 - 비정상적인 트래픽 패턴(IP, UserAgent)이 감지되면 차단 룰을 제안한다.
-                
+
                 """ + specInstruction + """
-                
-                [응답 형식]
-                반드시 아래 JSON 형식만 반환하고, 다른 텍스트는 절대 포함하지 마:
-                {
-                  "actionType": "SCALE_UP | SCALE_DOWN | MAINTAIN | BLOCK 중 하나",
-                  "rationale": "판단 근거를 한국어로 2~3문장으로 작성",
-                  "recommendedAdmissionRps": 숫자,
-                  "recommendedAdmissionConcurrency": 숫자,
-                  "suggestedBlockRules": {
-                    "ipRanges": [],
-                    "userAgentPatterns": "문자열 또는 null"
-                  },
-                  "recommendedServerSpec": {
-                    "cpuCores": 숫자,
-                    "memoryGb": 숫자,
-                    "replicaCount": 숫자,
-                    "scaleAction": "SCALE_UP | SCALE_DOWN | MAINTAIN 중 하나",
-                    "reason": "스케일 조정 이유를 한국어로 작성"
-                  }
-                }
-                """;
+
+                [응답 형식 - 반드시 아래 JSON만 반환, 다른 텍스트 절대 금지]
+                """ + responseExample;
     }
 
     private void saveRecommendationToDb(Long eventId, Long adminUserId,
