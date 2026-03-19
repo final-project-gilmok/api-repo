@@ -29,13 +29,10 @@ export default function Monitoring() {
 
   return (
     <div className="d-flex flex-column gap-4">
-      {/* 상단 헤더 영역 */}
-      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-0">
         <div>
-          <h1 className="h3 fw-bold mb-1">모니터링</h1>
-          <p className="text-muted small mb-0">
-            시스템 메트릭과 최근 API 요청 로그를 한눈에 확인합니다.
-          </p>
+          <h2 className="h5 fw-semibold mb-1">모니터링</h2>
+          <p className="text-muted mb-0">이벤트의 실시간 RPS, 에러율, 대기열 길이 등을 모니터링합니다.</p>
         </div>
         {eventId && (
           <button

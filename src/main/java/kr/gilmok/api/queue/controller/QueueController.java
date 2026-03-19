@@ -1,5 +1,8 @@
 package kr.gilmok.api.queue.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import kr.gilmok.api.policy.dto.PolicyCacheDto;
@@ -21,11 +24,20 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/queue")
 @RequiredArgsConstructor
+@Tag(name = "Queue", description = "대기열 API")
+@SecurityRequirement(name = "bearerAuth")
 public class QueueController {
 
     private final QueueService queueService;
 
     @PostMapping("/register")
+    @Operation(summary = "대기열 등록", description = "이벤트 대기열에 사용자를 등록하고 큐 키를 발급합니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 값 검증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Redis 장애")
+    })
     public ResponseEntity<ApiResponse<QueueRegisterResponse>> register(
             @AuthenticationPrincipal CustomUserDetails principal,
             @Valid @RequestBody QueueRegisterRequest request,
@@ -41,6 +53,13 @@ public class QueueController {
     }
 
     @GetMapping("/status")
+    @Operation(summary = "대기열 상태 조회", description = "queueKey와 eventId로 현재 대기 순번 및 상태를 조회합니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "대기열 정보 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Redis 장애")
+    })
     public ResponseEntity<ApiResponse<QueueStatusResponse>> getStatus(
             @AuthenticationPrincipal CustomUserDetails principal,
             @RequestParam String eventId,

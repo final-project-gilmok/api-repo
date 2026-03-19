@@ -35,6 +35,7 @@ export default function AdminReservations() {
     setError(null)
     setReservations([])
     setStats(null)
+
     loadReservationsAndStats()
       .catch(() => {
         setReservations([])
@@ -50,13 +51,8 @@ export default function AdminReservations() {
 
   return (
     <>
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <h1 className="h4 fw-bold mb-0">예약 현황 - 이벤트 #{eventId}</h1>
-        <Link to={`/admin/events/${eventId}`} className="btn btn-outline-secondary btn-sm">
-          돌아가기
-        </Link>
-      </div>
-
+      <h2 className="h5 fw-semibold mb-1">예약 현황</h2>
+      <p className="text-muted mb-4">예약 통계와 예약 내역을 확인합니다.</p>
       {error && (
         <div className="alert alert-danger py-2 mb-3">{error}</div>
       )}

@@ -144,7 +144,7 @@ export default function EventManagement() {
                                 to={`/admin/events/${evt.eventId}`}
                                 className="btn btn-sm btn-link text-secondary p-0"
                                 title="상세"
-                                aria-label="이벤트 상세 보기"
+                                aria-label="이벤트 정보 보기"
                               >
                                 ⋮
                               </Link>

@@ -9,7 +9,7 @@ const statusLabel = {
 }
 const statusColor = {
   HOLDING: 'warning',
-  CONFIRMED: 'success',
+  CONFIRMED: 'primary',
   CANCELLED: 'secondary',
 }
 

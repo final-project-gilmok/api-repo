@@ -15,12 +15,12 @@ export default function ReservationResult() {
 
   return (
     <div className="text-center py-5">
-      <div className="mb-3">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="#198754">
+      <div className="mb-3 text-primary checkmark-success-animate">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
         </svg>
       </div>
-      <h2 className="h3 fw-bold text-success mb-3">예약이 확정되었습니다!</h2>
+      <h2 className="h3 fw-bold text-primary mb-3">예약이 확정되었습니다!</h2>
 
       <div className="card border mx-auto" style={{ maxWidth: 480 }}>
         <div className="card-body text-start">
@@ -31,7 +31,7 @@ export default function ReservationResult() {
               <tr><th>구역</th><td>{reservation.section}석</td></tr>
               <tr><th>수량</th><td>{reservation.quantity}매</td></tr>
               <tr><th>합계</th><td className="fw-bold">{reservation.totalPrice?.toLocaleString()}원</td></tr>
-              <tr><th>상태</th><td><span className="badge bg-success">{reservation.status}</span></td></tr>
+              <tr><th>상태</th><td><span className="badge bg-primary">{reservation.status}</span></td></tr>
             </tbody>
           </table>
         </div>

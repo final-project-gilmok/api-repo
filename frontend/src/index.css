@@ -1,7 +1,19 @@
 :root {
   --sidebar-width: 220px;
   --header-height: 56px;
-  --primary-blue: #0d6efd;
+  /* Brand primary (teal) */
+  --primary-blue: #377381;
+  --primary-blue-rgb: 55, 115, 129;
+  --primary-blue-100: #e6f0f1;
+  --primary-blue-200: #d2e5e8;
+  --primary-blue-700: #2d5f6b;
+  --primary-blue-800: #244f59;
+
+  /* Bootstrap theme overrides */
+  --bs-primary: var(--primary-blue);
+  --bs-primary-rgb: var(--primary-blue-rgb);
+  --bs-link-color: var(--primary-blue);
+  --bs-link-hover-color: var(--primary-blue-700);
 }
 
 body {
@@ -46,7 +58,7 @@ body {
 }
 
 .admin-sidebar .nav-link.active {
-  background: #e7f1ff;
+  background: var(--primary-blue-100);
   color: var(--primary-blue);
   font-weight: 500;
 }
@@ -138,7 +150,7 @@ body {
 
 .quick-link-card:hover {
   border-color: var(--primary-blue);
-  box-shadow: 0 0.25rem 0.5rem rgba(13, 110, 253, 0.15);
+  box-shadow: 0 0.25rem 0.5rem rgba(var(--primary-blue-rgb), 0.15);
   color: var(--primary-blue);
 }
 
@@ -155,6 +167,37 @@ body {
   border-radius: 0.375rem;
 }
 
+/* Buttons (Bootstrap) */
+.btn-primary {
+  --bs-btn-bg: var(--primary-blue);
+  --bs-btn-border-color: var(--primary-blue);
+  --bs-btn-hover-bg: var(--primary-blue-700);
+  --bs-btn-hover-border-color: var(--primary-blue-700);
+  --bs-btn-active-bg: var(--primary-blue-800);
+  --bs-btn-active-border-color: var(--primary-blue-800);
+  --bs-btn-disabled-bg: var(--primary-blue-200);
+  --bs-btn-disabled-border-color: var(--primary-blue-200);
+  --bs-btn-disabled-color: var(--primary-blue-800);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--primary-blue);
+  --bs-btn-border-color: var(--primary-blue);
+  --bs-btn-hover-bg: var(--primary-blue);
+  --bs-btn-hover-border-color: var(--primary-blue);
+  --bs-btn-active-bg: var(--primary-blue-800);
+  --bs-btn-active-border-color: var(--primary-blue-800);
+  --bs-btn-disabled-color: var(--primary-blue-700);
+  --bs-btn-disabled-border-color: var(--primary-blue-200);
+}
+
+.btn-primary:disabled,
+.btn-primary.disabled,
+.btn-outline-primary:disabled,
+.btn-outline-primary.disabled {
+  opacity: 1;
+}
+
 .event-detail-tabs.nav-tabs {
   border-bottom: 1px solid #dee2e6;
   gap: 0.25rem;
@@ -165,4 +208,23 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* 예약 확정 체크 아이콘 등장 애니메이션 */
+@keyframes checkmark-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.checkmark-success-animate {
+  animation: checkmark-pop 0.55s ease-out forwards;
 }

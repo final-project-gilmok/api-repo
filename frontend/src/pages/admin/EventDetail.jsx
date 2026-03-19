@@ -70,8 +70,8 @@ export default function EventDetail() {
   if (loading) {
     return (
       <>
-        <h1 className="h3 mb-1 fw-bold">이벤트 상세</h1>
-        <p className="text-muted">불러오는 중...</p>
+        <h2 className="h5 fw-semibold mb-1">이벤트 정보</h2>
+        <p className="text-muted mb-4">불러오는 중...</p>
       </>
     )
   }
@@ -79,7 +79,8 @@ export default function EventDetail() {
   if (error && !event) {
     return (
       <>
-        <h1 className="h3 mb-1 fw-bold">이벤트 상세</h1>
+        <h2 className="h5 fw-semibold mb-1">이벤트 정보</h2>
+        <p className="text-muted mb-4">이벤트를 열기/종료하고 각 메뉴로 이동할 수 있습니다.</p>
         <div className="alert alert-danger">{error}</div>
       </>
     )
@@ -89,9 +90,8 @@ export default function EventDetail() {
 
   return (
     <>
-      <h1 className="h3 mb-1 fw-bold">이벤트 상세</h1>
-      <p className="text-muted mb-4">{ev.name}</p>
-
+      <h2 className="h5 fw-semibold mb-1">이벤트 정보</h2>
+      <p className="text-muted mb-4">이벤트를 열기/종료하고 각 메뉴로 이동할 수 있습니다.</p>
       {error && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           {error}

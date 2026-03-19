@@ -3,6 +3,17 @@ name: Build & Push to GHCR
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target (all, oci or aws)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - oci
+          - aws
 
 permissions:
   contents: read
@@ -39,7 +50,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ✅ 기존 스텝 제거하고 이걸로 교체
       - name: Build and Push Backend
         uses: docker/build-push-action@v5
         with:
@@ -47,43 +57,64 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
 
-      # ✅ 신규 추가
-      - name: Validate frontend build args
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-          VITE_AUTH_BASE_URL: ${{ secrets.VITE_AUTH_BASE_URL }}
-        run: |
-          test -n "$VITE_API_BASE_URL" || { echo "VITE_API_BASE_URL is required"; exit 1; }
-          test -n "$VITE_AUTH_BASE_URL" || { echo "VITE_AUTH_BASE_URL is required"; exit 1; }
-
-      - name: Build and Push Frontend
+      - name: Build and Push Frontend (OCI)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'oci')
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
-          tags: ${{ env.IMAGE_NAME }}/frontend:latest
+          tags: ${{ env.IMAGE_NAME }}/frontend:latest-oci
           build-args: |
-            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
-            VITE_AUTH_BASE_URL=${{ secrets.VITE_AUTH_BASE_URL }}
-            VITE_GRAFANA_BASE_URL=${{ secrets.VITE_GRAFANA_BASE_URL }}
+            VITE_API_BASE_URL=${{ secrets.OCI_FRONTEND_URL }}
+            VITE_AUTH_BASE_URL=${{ secrets.OCI_FRONTEND_URL }}
+            VITE_GRAFANA_BASE_URL=http://${{ secrets.OCI_FRONTEND_URL }}/grafana
             VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
+      - name: Build and Push Frontend (AWS)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'aws')
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.IMAGE_NAME }}/frontend:latest-aws
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.AWS_FRONTEND_URL }}
+            VITE_AUTH_BASE_URL=${{ secrets.AWS_FRONTEND_URL }}
+            VITE_GRAFANA_BASE_URL=http://${{ secrets.OCI_FRONTEND_URL }}/grafana
+            VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
-      - name: Trigger Deploy Repo (Backend)
-        if: success()
+      - name: Trigger Deploy Repo (Backend - OCI)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'oci')
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITOPS_TOKEN }}
           repository: final-project-gilmok/deploy-repo
           event-type: update-image
-          client-payload: '{"image_tag": "latest", "service_name": "api-server"}'
+          client-payload: '{"image_tag": "latest", "service_name": "api-server", "target": "oci"}'
 
-      # ✅ 추가
-      - name: Trigger Deploy Repo (Frontend)
-        if: success()
+      - name: Trigger Deploy Repo (Backend - AWS)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'aws')
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITOPS_TOKEN }}
           repository: final-project-gilmok/deploy-repo
           event-type: update-image
-          client-payload: '{"image_tag": "latest", "service_name": "frontend-server"}'
+          client-payload: '{"image_tag": "latest", "service_name": "api-server", "target": "aws"}'
+
+      - name: Trigger Deploy Repo (Frontend - OCI)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'oci')
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          repository: final-project-gilmok/deploy-repo
+          event-type: update-image
+          client-payload: '{"image_tag": "latest-oci", "service_name": "frontend-server", "target": "oci"}'
+
+      - name: Trigger Deploy Repo (Frontend - AWS)
+        if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'aws')
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          repository: final-project-gilmok/deploy-repo
+          event-type: update-image
+          client-payload: '{"image_tag": "latest-aws", "service_name": "frontend-server", "target": "aws"}'
