@@ -99,7 +99,6 @@ export default function AIRecommendation() {
                     }
                     : null
 
-            // AI가 동시 접속 수를 주지 않으면 기존 정책 값을 보존 (덮어쓰지 않음)
             let admissionConcurrency = aiData.recommendedAdmissionConcurrency
             if (admissionConcurrency === undefined || admissionConcurrency === null) {
                 try {
@@ -127,17 +126,17 @@ export default function AIRecommendation() {
 
     return (
         <div className="d-flex flex-column gap-4">
-            {/* 상단 헤더 영역 */}
+            {/* 페이지 헤더 */}
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h1 className="h3 fw-bold mb-1">AI 정책 추천</h1>
                     <p className="text-muted small mb-0">
-                        현재 트래픽과 메트릭을 기반으로 이벤트 운영 정책을 자동으로 제안합니다.
+                        서버 스펙과 실시간 메트릭을 조합하여 최적의 운영 정책을 제안합니다.
                     </p>
                 </div>
             </div>
 
-            {/* 분석 전 상태 */}
+            {/* 서버 스펙 입력 폼 */}
             {!aiData && (
                 <div className="card">
                     <div className="card-body">
@@ -382,4 +381,3 @@ export default function AIRecommendation() {
         </div>
     )
 }
-
