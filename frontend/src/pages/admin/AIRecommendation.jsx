@@ -214,7 +214,7 @@ export default function AIRecommendation() {
                         {hasAnySpec(serverSpec) &&
                             serverSpec.cpuCores && serverSpec.memoryGb && serverSpec.replicaCount && (
                                 <div className="alert alert-secondary py-2 small mb-3">
-                                    📐 총 처리 용량 미리보기:
+                                    총 처리 용량 미리보기:
                                     CPU <strong>{serverSpec.cpuCores * serverSpec.replicaCount}코어</strong> |
                                     메모리 <strong>{serverSpec.memoryGb * serverSpec.replicaCount}GB</strong>
                                     ({serverSpec.replicaCount}대 기준)
@@ -248,7 +248,7 @@ export default function AIRecommendation() {
                         <div className="card border-secondary">
                             <div className="card-body py-2">
                                 <p className="text-muted small mb-0">
-                                    📊 분석 기준 스펙: <strong>{serverSpec.instanceType}</strong> |
+                                    분석 기준 스펙: <strong>{serverSpec.instanceType}</strong> |
                                     CPU <strong>{serverSpec.cpuCores}코어</strong> |
                                     메모리 <strong>{serverSpec.memoryGb}GB</strong> |
                                     인스턴스 <strong>{serverSpec.replicaCount}대</strong>
