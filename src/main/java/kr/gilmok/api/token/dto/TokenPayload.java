@@ -4,6 +4,7 @@ import lombok.Builder;
 
 @Builder
 public record TokenPayload(
+        String jti,  // JWT ID (One-Time Token 패턴용, 예약 확정 후 무효화에 사용)
         Long id, // common filter용 (userId)
         String sub, // spec (user_unique_id)
         String status, // common filter용 (대기열 통과자는 ADMITTED)
