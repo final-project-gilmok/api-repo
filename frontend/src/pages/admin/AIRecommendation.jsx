@@ -33,14 +33,14 @@ export default function AIRecommendation() {
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
     const [aiData, setAiData] = useState(null)
-    const [serverSpec, setServerSpec] = useState(loadSavedSpec) // ✅ 이전 입력값 복원
+    const [serverSpec, setServerSpec] = useState(loadSavedSpec)
     const [specError, setSpecError] = useState('')
 
     const handleSpecChange = (e) => {
         const { name, value } = e.target
         setServerSpec(prev => {
             const updated = { ...prev, [name]: value }
-            localStorage.setItem(SPEC_STORAGE_KEY, JSON.stringify(updated)) // ✅ 자동 저장
+            localStorage.setItem(SPEC_STORAGE_KEY, JSON.stringify(updated))
             return updated
         })
     }
@@ -125,6 +125,7 @@ export default function AIRecommendation() {
 
     return (
         <div className="d-flex flex-column gap-4">
+            {/* 페이지 헤더 */}
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h1 className="h3 fw-bold mb-1">AI 정책 추천</h1>
@@ -138,19 +139,24 @@ export default function AIRecommendation() {
             {!aiData && (
                 <div className="card">
                     <div className="card-body">
-                        <h2 className="h5 fw-semibold mb-1">
-                            서버 스펙 입력
-                            <span className="text-muted fw-normal fs-6 ms-2">(선택)</span>
-                        </h2>
-                        <p className="text-muted small mb-3">
-                            입력하면 스펙에 맞는 정책을 추천받을 수 있습니다.
+                        <div className="d-flex align-items-center gap-2 mb-1">
+                            <h2 className="h5 fw-semibold mb-0">서버 스펙 입력</h2>
+                            <span className="badge bg-secondary fw-normal">선택 사항</span>
+                        </div>
+
+                        <div className="alert alert-info py-2 small mb-3">
+                            🔍 <strong>서버 스펙을 입력하면 더 정확한 정책을 추천받을 수 있습니다.</strong>
+                            <br />
+                            CPU, 메모리, 인스턴스 수를 기반으로 AI가 서버 처리 용량을 계산하여
+                            RPS·동시 접속 수를 최적화된 값으로 제안합니다.
                             입력하지 않으면 실시간 메트릭만으로 분석합니다.
                             {hasAnySpec(serverSpec) && (
-                                <span className="text-success ms-1">✓ 이전에 입력한 스펙이 복원되었습니다.</span>
+                                <span className="text-success d-block mt-1">✓ 이전에 입력한 스펙이 복원되었습니다.</span>
                             )}
-                        </p>
+                        </div>
 
                         <div className="row g-3 mb-3">
+                            {/* 인스턴스 타입 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">인스턴스 타입</label>
                                 <input
@@ -161,7 +167,12 @@ export default function AIRecommendation() {
                                     value={serverSpec.instanceType}
                                     onChange={handleSpecChange}
                                 />
+                                <div className="form-text">
+                                    AWS/OCI 인스턴스 타입 또는 서버 사양 이름
+                                </div>
                             </div>
+
+                            {/* CPU 코어 수 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">CPU 코어 수</label>
                                 <input
@@ -173,7 +184,12 @@ export default function AIRecommendation() {
                                     value={serverSpec.cpuCores}
                                     onChange={handleSpecChange}
                                 />
+                                <div className="form-text">
+                                    서버 1대 기준 할당된 CPU 코어 수
+                                </div>
                             </div>
+
+                            {/* 메모리 */}
                             <div className="col-md-3">
                                 <label className="form-label small fw-semibold">메모리 (GB)</label>
                                 <input
@@ -185,9 +201,14 @@ export default function AIRecommendation() {
                                     value={serverSpec.memoryGb}
                                     onChange={handleSpecChange}
                                 />
+                                <div className="form-text">
+                                    서버 1대 기준 할당된 메모리 용량
+                                </div>
                             </div>
+
+                            {/* 인스턴스 수 (레플리카 수) */}
                             <div className="col-md-3">
-                                <label className="form-label small fw-semibold">레플리카 수</label>
+                                <label className="form-label small fw-semibold">인스턴스 수 (레플리카 수)</label>
                                 <input
                                     type="number"
                                     className="form-control"
@@ -197,12 +218,26 @@ export default function AIRecommendation() {
                                     value={serverSpec.replicaCount}
                                     onChange={handleSpecChange}
                                 />
+                                <div className="form-text">
+                                    현재 실행 중인 서버(컨테이너) 대수
+                                </div>
                             </div>
                         </div>
 
                         {specError && (
                             <div className="alert alert-danger py-2 small">{specError}</div>
                         )}
+
+                        {/* 총 처리 용량 미리보기 */}
+                        {hasAnySpec(serverSpec) &&
+                            serverSpec.cpuCores && serverSpec.memoryGb && serverSpec.replicaCount && (
+                                <div className="alert alert-secondary py-2 small mb-3">
+                                    📐 총 처리 용량 미리보기:
+                                    CPU <strong>{serverSpec.cpuCores * serverSpec.replicaCount}코어</strong> |
+                                    메모리 <strong>{serverSpec.memoryGb * serverSpec.replicaCount}GB</strong>
+                                    ({serverSpec.replicaCount}대 기준)
+                                </div>
+                            )}
 
                         <div className="text-center mt-3">
                             <button
@@ -211,7 +246,12 @@ export default function AIRecommendation() {
                                 onClick={handleRequestAi}
                                 disabled={loading}
                             >
-                                {loading ? 'AI가 시스템 지표를 분석 중입니다...' : '실시간 AI 트래픽 분석 시작'}
+                                {loading ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-2" />
+                                        AI가 시스템 지표를 분석 중입니다...
+                                    </>
+                                ) : '실시간 AI 트래픽 분석 시작'}
                             </button>
                         </div>
                     </div>
@@ -229,7 +269,7 @@ export default function AIRecommendation() {
                                     📊 분석 기준 스펙: <strong>{serverSpec.instanceType}</strong> |
                                     CPU <strong>{serverSpec.cpuCores}코어</strong> |
                                     메모리 <strong>{serverSpec.memoryGb}GB</strong> |
-                                    레플리카 <strong>{serverSpec.replicaCount}대</strong>
+                                    인스턴스 <strong>{serverSpec.replicaCount}대</strong>
                                     <button
                                         className="btn btn-link btn-sm py-0 ms-2"
                                         onClick={() => setAiData(null)}
@@ -256,7 +296,7 @@ export default function AIRecommendation() {
                                             {aiData.rationale}
                                         </div>
 
-                                        {/* ✅ 추천 서버 스펙 */}
+                                        {/* 추천 서버 스펙 */}
                                         {aiData.recommendedServerSpec && (
                                             <div className="mt-2">
                                                 <p className="text-muted small mb-2">추천 서버 스펙</p>
@@ -266,7 +306,7 @@ export default function AIRecommendation() {
                                                     <div className="d-flex gap-3 flex-wrap mb-2">
                                                         <span className="small">CPU <strong>{aiData.recommendedServerSpec.cpuCores}코어</strong></span>
                                                         <span className="small">메모리 <strong>{aiData.recommendedServerSpec.memoryGb}GB</strong></span>
-                                                        <span className="small">레플리카 <strong>{aiData.recommendedServerSpec.replicaCount}대</strong></span>
+                                                        <span className="small">인스턴스 <strong>{aiData.recommendedServerSpec.replicaCount}대</strong></span>
                                                         <span className={`badge ${
                                                             aiData.recommendedServerSpec.scaleAction === 'SCALE_UP' ? 'bg-warning text-dark' :
                                                                 aiData.recommendedServerSpec.scaleAction === 'SCALE_DOWN' ? 'bg-info text-dark' : 'bg-secondary'
@@ -286,7 +326,12 @@ export default function AIRecommendation() {
                                         onClick={handleApply}
                                         disabled={applying}
                                     >
-                                        {applying ? '적용 중...' : '추천 정책 즉시 적용'}
+                                        {applying ? (
+                                            <>
+                                                <span className="spinner-border spinner-border-sm me-2" />
+                                                적용 중...
+                                            </>
+                                        ) : '추천 정책 즉시 적용'}
                                     </button>
                                 </div>
                             </div>
