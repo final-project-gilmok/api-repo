@@ -47,7 +47,7 @@ public class RedisConfig {
                                                         .count(3)
                                                         .build()
                                         )
-                                        .connectTimeout(Duration.ofSeconds(3))
+                                        .connectTimeout(Duration.ofMillis(2000))
                                         .build()
                         )
                         .disconnectedBehavior(
