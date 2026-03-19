@@ -57,7 +57,6 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
 
-      # ✅ OCI 프론트엔드 빌드
       - name: Build and Push Frontend (OCI)
         if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'oci')
         uses: docker/build-push-action@v5
@@ -71,7 +70,6 @@ jobs:
             VITE_GRAFANA_BASE_URL=http://${{ secrets.OCI_FRONTEND_URL }}/grafana
             VITE_GRAFANA_DASHBOARD_UID=${{ secrets.VITE_GRAFANA_DASHBOARD_UID }}
 
-      # ✅ AWS 프론트엔드 빌드
       - name: Build and Push Frontend (AWS)
         if: success() && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'aws')
         uses: docker/build-push-action@v5
@@ -120,4 +118,3 @@ jobs:
           repository: final-project-gilmok/deploy-repo
           event-type: update-image
           client-payload: '{"image_tag": "latest-aws", "service_name": "frontend-server", "target": "aws"}'
-  이렇게 수정하면 되는거지?
