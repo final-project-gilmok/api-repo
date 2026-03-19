@@ -15,14 +15,17 @@ spring:
   data:
     redis:
       url: ${REDIS_URL}
-      timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2000ms}
       ssl:
         enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:true} # 기본값 true
       lettuce:
         pool:
+          enabled: true
           max-active: ${REDIS_POOL_MAX_ACTIVE:50}
           max-idle: ${REDIS_POOL_MAX_IDLE:20}
           min-idle: ${REDIS_POOL_MIN_IDLE:10}
+          max-wait: 1000ms                     # ✅ 추가
+        shutdown-timeout: 200ms
 
   jpa:
     hibernate:
@@ -61,3 +64,33 @@ management:
   health:
     rabbit:
       enabled: false
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      redis-admission:          # 기존
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+      redis-policy-cache:       # ✅ 새로 추가
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+      redis-queue:              # ✅ 새로 추가
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - kr.gilmok.common.exception.CustomException
+          - java.lang.IllegalArgumentException
+      redis-queue-verify:
+        # verifyQueueAccess() 단독 사용
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - kr.gilmok.common.exception.CustomException
